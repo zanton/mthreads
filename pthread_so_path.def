@@ -1,0 +1,1 @@
+#define LIBPTHREAD_PATH "/lib/i386-linux-gnu/libpthread.so.0"

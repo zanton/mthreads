@@ -1,0 +1,5 @@
+libmyth_native_la-myth_context.lo: myth_context.S myth_config.h config.h
+
+myth_config.h:
+
+config.h:
