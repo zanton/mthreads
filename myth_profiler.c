@@ -15,7 +15,13 @@ task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
 int sched_num = 0;
 
-double base = 0;
+double base = 0;  // base time
+
+// Test: Evaluate contex switch time, and malloc time
+#define NMAX 100
+double * malloctn;
+double * malloctr;
+int n_malloctn, n_malloctr;
 
 double profiler_get_curtime()
 {
@@ -23,6 +29,22 @@ double profiler_get_curtime()
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1.0E+3 + tv.tv_usec * 1.0E-3;
 }
+
+
+// Test
+void profiler_add_malloctn_item(double item) {
+	if (n_malloctn < NMAX) {
+		malloctn[n_malloctn++] = item;
+	}
+}
+
+// Test
+void profiler_add_malloctr_item(double item) {
+	if (n_malloctr < NMAX) {
+		malloctr[n_malloctr++] = item;
+	}
+}
+
 
 void profiler_create_root_node() {
 	if  (root_node == NULL) {
@@ -59,13 +81,29 @@ void profiler_create_sched_nodes(int num) {
 void profiler_init(int worker_thread_num) {
 	profiler_create_root_node();
 	profiler_create_sched_nodes(worker_thread_num);
+
+	// Test
+	malloctn = (double *) myth_malloc(sizeof(double) * NMAX);
+	malloctr = (double *) myth_malloc(sizeof(double) * NMAX);
+	int i;
+	for (i=0; i<NMAX; i++) {
+		malloctn[i] = 0;
+		malloctr[i] = 0;
+	}
+	n_malloctn = n_malloctr = 0;
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
 	task_node_t new_node;
 	// Allocate memory
 	//new_node = (task_node_t) myth_flmalloc(env->rank, sizeof(task_node));
+
+	// Test
+	double time1 = profiler_get_curtime();
 	new_node = (task_node_t) myth_malloc(sizeof(task_node));
+	double time2 = profiler_get_curtime();
+	profiler_add_malloctn_item(time2 - time1);
+
 	// Set up fields
 	new_node->level = parent->level + 1;
 	new_node->index = 0;  // need edited later
@@ -292,12 +330,39 @@ void profiler_output_data() {
 	fprintf(fp, "\n}");
 	fclose(fp);
 
+	// Test: Output
+	fp = fopen("./prof/test_data.txt", "w");
+	double sum = 0;
+	fprintf(fp, "Malloc task node: %d items\n", n_malloctn);
+	for (i=0; i<n_malloctn; i++) {
+		if (i % 10 == 0 && i != 0)
+			fprintf(fp, "\n");
+		fprintf(fp, "%0.3lf ", malloctn[i]);
+		sum += malloctn[i];
+	}
+	fprintf(fp, "\nAverage = %0.3lf\n\nMalloc time record: %d items\n", sum/n_malloctn, n_malloctr);
+	sum = 0;
+	for (i=0; i<n_malloctr; i++) {
+		if (i % 10 == 0 && i != 0)
+			fprintf(fp, "\n");
+		fprintf(fp, "%0.3lf ", malloctr[i]);
+		sum += malloctr[i];
+	}
+	fprintf(fp, "\nAverage = %0.3lf\n", sum/n_malloctr);
+	fclose(fp);
+
 	printf("\nProfiler's output ended.\n");
 }
 
 time_record_t profiler_create_time_record(char type, int worker, double val) {
 	time_record_t record;
+
+	// Test
+	double time1 = profiler_get_curtime();
 	record = (time_record_t) myth_malloc(sizeof(time_record));
+	double time2 = profiler_get_curtime();
+	profiler_add_malloctr_item(time2 - time1);
+
 	record->type = type;
 	record->worker = worker;
 	record->val = val;
