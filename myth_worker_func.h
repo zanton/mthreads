@@ -207,11 +207,6 @@ static inline void myth_setup_worker(int rank)
 		setitimer(ITIMER_REAL,&tv,NULL);
 #endif
 	}
-
-	// Ant: [worker] [myth_setup_worker] Initialize time variables
-	env->running_time = 0.0;
-	env->idle_time = 0.0;
-	env->entry = NULL;
 }
 
 //Cleanup a worker thread
@@ -286,9 +281,6 @@ MYTH_CTX_CALLBACK void myth_startpoint_init_ex_1(void *arg1,void *arg2,void *arg
 	myth_queue_push(&env->runnable_q,this_th);
 }
 
-// Ant: prototype of ant_get_curtime()
-//static inline double ant_get_curtime();
-
 //Execute worker thread scheduling loop introducing current context as a new thread
 static inline void myth_startpoint_init_ex_body(int rank)
 {
@@ -309,11 +301,6 @@ static inline void myth_startpoint_init_ex_body(int rank)
 #endif
 	//Set worker thread descriptor
 	this_th->env = env;
-
-	// Ant: [myth_startpoint_init_ex_body] set the root level for this_th
-	this_th->level = 0;
-	// Ant: [myth_startpoint_init_ex_body] set last_start_time for this_th
-	this_th->context.last_start_time = ant_get_curtime();
 
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for root task
 	this_th->node = profiler_get_root_node();
@@ -458,9 +445,6 @@ static void myth_sched_loop(void)
 	}
 #endif
 	while (1) {
-		double time0, time1, time2, time3;
-		time0 = ant_get_curtime();
-		time2 = time1 = time0;
 		//sched_yield();
 		myth_thread_t next_run;
 		//Get runnable thread
@@ -487,17 +471,12 @@ static void myth_sched_loop(void)
 			myth_dprintf("myth_sched_loop:switching to thread:%p\n",next_run);
 #endif
 			myth_assert(next_run->status==MYTH_STATUS_READY);
-			time1 = ant_get_curtime();
 			myth_swap_context(&env->sched.context, &next_run->context);
-			time2 = ant_get_curtime();
 #ifdef MYTH_SCHED_LOOP_DEBUG
 			myth_dprintf("myth_sched_loop:returned from thread:%p\n",(void*)next_run);
 #endif
 			env->this_thread=NULL;
 		}
-		time3 = ant_get_curtime();
-		env->running_time += time2 - time1;
-		env->idle_time += (time3 - time2) + (time1 - time0);
 		//Check exit flag
 		if (env->exit_flag==1){
 			env->this_thread=NULL;
@@ -520,11 +499,4 @@ static inline int myth_get_num_workers_body(void)
 	return g_worker_thread_num;
 }
 
-// Ant: define ant_get_curtime()
-/*static inline double ant_get_curtime()
-{
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1.0E+3 + tv.tv_usec * 1.0E-3;
-}*/
 #endif

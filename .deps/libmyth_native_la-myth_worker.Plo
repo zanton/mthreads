@@ -32,7 +32,8 @@ libmyth_native_la-myth_worker.lo: myth_worker.c myth_worker.h \
  /usr/include/i386-linux-gnu/bits/select2.h \
  /usr/include/i386-linux-gnu/sys/sysmacros.h /usr/include/alloca.h \
  /usr/include/i386-linux-gnu/bits/stdlib.h myth_config.h config.h \
- myth_io.h /usr/include/i386-linux-gnu/sys/socket.h \
+ myth_profiler.h /usr/include/i386-linux-gnu/sys/time.h myth_io.h \
+ /usr/include/i386-linux-gnu/sys/socket.h \
  /usr/include/i386-linux-gnu/sys/uio.h \
  /usr/include/i386-linux-gnu/bits/uio.h \
  /usr/include/i386-linux-gnu/bits/socket.h \
@@ -58,8 +59,7 @@ libmyth_native_la-myth_worker.lo: myth_worker.c myth_worker.h \
  /usr/include/i386-linux-gnu/bits/confname.h /usr/include/getopt.h \
  /usr/include/i386-linux-gnu/bits/unistd.h \
  /usr/include/i386-linux-gnu/sys/mman.h \
- /usr/include/i386-linux-gnu/bits/mman.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h myth_worker_proto.h myth_desc.h \
+ /usr/include/i386-linux-gnu/bits/mman.h myth_worker_proto.h myth_desc.h \
  myth_worker_func.h /usr/include/signal.h \
  /usr/include/i386-linux-gnu/bits/signum.h \
  /usr/include/i386-linux-gnu/bits/siginfo.h \
@@ -184,6 +184,10 @@ myth_config.h:
 
 config.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_io.h:
 
 /usr/include/i386-linux-gnu/sys/socket.h:
@@ -263,10 +267,6 @@ myth_misc.h:
 /usr/include/i386-linux-gnu/sys/mman.h:
 
 /usr/include/i386-linux-gnu/bits/mman.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_worker_proto.h:
 

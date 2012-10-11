@@ -50,7 +50,8 @@ libmyth_compat_la-myth_if_pthread.lo: myth_if_pthread.c myth_init.h \
  myth_context.h /usr/include/stdlib.h \
  /usr/include/i386-linux-gnu/bits/waitflags.h \
  /usr/include/i386-linux-gnu/bits/waitstatus.h /usr/include/alloca.h \
- /usr/include/i386-linux-gnu/bits/stdlib.h myth_worker.h myth_wsqueue.h \
+ /usr/include/i386-linux-gnu/bits/stdlib.h myth_profiler.h \
+ /usr/include/i386-linux-gnu/sys/time.h myth_worker.h myth_wsqueue.h \
  /usr/include/string.h /usr/include/i386-linux-gnu/bits/string.h \
  /usr/include/i386-linux-gnu/bits/string2.h \
  /usr/include/i386-linux-gnu/bits/string3.h myth_misc.h \
@@ -59,8 +60,7 @@ libmyth_compat_la-myth_if_pthread.lo: myth_if_pthread.c myth_init.h \
  /usr/include/i386-linux-gnu/bits/confname.h /usr/include/getopt.h \
  /usr/include/i386-linux-gnu/bits/unistd.h \
  /usr/include/i386-linux-gnu/sys/mman.h \
- /usr/include/i386-linux-gnu/bits/mman.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h myth_tls.h myth_desc.h \
+ /usr/include/i386-linux-gnu/bits/mman.h myth_tls.h myth_desc.h \
  myth_sched_proto.h myth_io_proto.h /usr/include/fcntl.h \
  /usr/include/i386-linux-gnu/bits/fcntl.h \
  /usr/include/i386-linux-gnu/bits/stat.h \
@@ -238,6 +238,10 @@ myth_context.h:
 
 /usr/include/i386-linux-gnu/bits/stdlib.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_worker.h:
 
 myth_wsqueue.h:
@@ -267,10 +271,6 @@ myth_misc.h:
 /usr/include/i386-linux-gnu/sys/mman.h:
 
 /usr/include/i386-linux-gnu/bits/mman.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_tls.h:
 

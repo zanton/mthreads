@@ -7,8 +7,8 @@
 
 #include "myth_config.h"
 
-// Antx: include
-//#include "myth_profiler.h"
+// Ant: include myth_profiler.h
+#include "myth_profiler.h"
 
 typedef void (*void_func_t)(void);
 
@@ -53,18 +53,11 @@ typedef struct myth_context
 #error "Architecture not defined"
 #endif
 
-  // Ant: [task] [struct myth_context] last_start_time, running_time
-  double last_start_time;
-  double running_time;
-
   // Ant: [prof] [struct myth_context] pointer to myth_thread and task_node
   struct myth_thread * thread;
   struct task_node * node;
 
 } myth_context, *myth_context_t;
-
-// Ant: prototype of ant_get_curtime()
-double ant_get_curtime();
 
 static inline void myth_make_context_empty(myth_context_t ctx, void *stack,
   size_t stacksize);
@@ -85,21 +78,12 @@ static inline void myth_make_context_voidcall(myth_context_t ctx, void_func_t fu
 // Ant: define myth_context_switch_hook_swap
 static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to)
 {
-	//struct myth_running_env* env = myth_get_current_env();
-	//myth_thread_t th = myth_context_to_thread(env, ctx);
-	from->running_time += ant_get_curtime() - from->last_start_time;
-	to->last_start_time = ant_get_curtime();
-	// Ant: [prof] record time
 	profiler_add_time_record_wthread(from->node, 1, from->thread);
 	profiler_add_time_record_wthread(to->node, 0, to->thread);
 }
 // Ant: define myth_context_switch_hook_set
 static void myth_context_switch_hook_set(myth_context_t ctx)
 {
-	//struct myth_running_env* env = myth_get_current_env();
-	//myth_thread_t th = myth_context_to_thread(env, ctx);
-	ctx->last_start_time = ant_get_curtime();
-	// Ant: [prof] record time
 	profiler_add_time_record_wthread(ctx->node, 0, ctx->thread);
 }
 

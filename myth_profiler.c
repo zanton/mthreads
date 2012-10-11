@@ -5,9 +5,11 @@
  *      Author: denjo
  */
 
+#include <sys/stat.h>
 #include "myth_profiler.h"
-#include "myth_desc.h"
+#include "myth_misc.h"
 #include "myth_worker.h"
+#include "myth_desc.h"
 
 task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
@@ -15,8 +17,7 @@ int sched_num = 0;
 
 double base = 0;
 
-// Ant: define ant_get_curtime()
-double ant_get_curtime()
+double profiler_get_curtime()
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -55,7 +56,12 @@ void profiler_create_sched_nodes(int num) {
 	}
 }
 
-task_node_t profiler_create_new_node(task_node_t parent, myth_running_env_t env) {
+void profiler_init(int worker_thread_num) {
+	profiler_create_root_node();
+	profiler_create_sched_nodes(worker_thread_num);
+}
+
+task_node_t profiler_create_new_node(task_node_t parent) {
 	task_node_t new_node;
 	// Allocate memory
 	//new_node = (task_node_t) myth_flmalloc(env->rank, sizeof(task_node));
@@ -99,10 +105,10 @@ void profiler_output_task_tree(FILE * fp, task_node_t node) {
 	if (child->mate == NULL) {
 		fprintf(fp, "%d -> %d\n", node->index, child->index);
 	} else {
-		fprintf(fp, "%d -> {%d, ", node->index, child->index);
+		fprintf(fp, "%d -> {%d ", node->index, child->index);
 		child = child->mate;
 		while (child->mate != NULL) {
-			fprintf(fp, "%d, ", child->index);
+			fprintf(fp, "%d ", child->index);
 			child = child->mate;
 		}
 		fprintf(fp, "%d}\n", child->index);
@@ -117,15 +123,6 @@ void profiler_output_task_tree(FILE * fp, task_node_t node) {
 
 void profiler_output_running_time(FILE * fp, task_node_t node) {
 	fprintf(fp, "%d [label=\"%d\\n%0.3lf\"]\n", node->index, node->index, node->running_time);
-	if (node->child != NULL)
-		profiler_output_running_time(fp, node->child);
-	if (node->mate != NULL)
-		profiler_output_running_time(fp, node->mate);
-}
-
-void profiler_output_running_time_2(FILE * fp, task_node_t node) {
-	fprintf(fp, "\n\nrunning_time2:\n");
-	fprintf(fp, "%d [label=\"%d\\n%0.3lf\"]\n", node->index, node->index, node->running_time2);
 	if (node->child != NULL)
 		profiler_output_running_time(fp, node->child);
 	if (node->mate != NULL)
@@ -251,13 +248,15 @@ void profiler_output_task_tree_wtime_arcs(FILE * fp, task_node_t node) {
 }
 
 void profiler_output_task_tree_wtime(FILE * fp) {
-	fprintf(fp, "\n\ntask tree with time records\n");
 	profiler_output_task_tree_wtime_1(fp, root_node);
 	profiler_output_task_tree_wtime_arcs(fp, root_node);
 }
 
 void profiler_output_data() {
-	printf("Profiler begins...");
+	printf("Profiler's output begins...");
+
+	// Make prof folder
+	mkdir("./prof", S_IRWXU | S_IRWXG | S_IROTH);
 
 	// Indexing tasks
 	root_node->index = 0;
@@ -271,15 +270,29 @@ void profiler_output_data() {
 
 	// Output data
 	FILE *fp;
-	fp = fopen("prof_data.txt", "w");
+
+	// Task tree
+	fp = fopen("./prof/task_tree.dot", "w");
+	fprintf(fp, "digraph g{\n");
 	profiler_output_task_tree(fp, root_node);
 	profiler_output_running_time(fp, root_node);
-	profiler_output_running_time_2(fp, root_node);
-	profiler_output_time_records(fp);
-	profiler_output_task_tree_wtime(fp);
+	fprintf(fp, "\n}");
 	fclose(fp);
 
-	printf("\nProfiler ended.\n");
+	// Time records
+	fp = fopen("./prof/time_records.txt", "w");
+	profiler_output_time_records(fp);
+	fclose(fp);
+
+	// Task tree with time records
+	fp = fopen("./prof/task_tree_w_time_records.dot", "w");
+	fprintf(fp, "// task tree with time records\n");
+	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
+	profiler_output_task_tree_wtime(fp);
+	fprintf(fp, "\n}");
+	fclose(fp);
+
+	printf("\nProfiler's output ended.\n");
 }
 
 time_record_t profiler_create_time_record(char type, int worker, double val) {
@@ -293,7 +306,7 @@ time_record_t profiler_create_time_record(char type, int worker, double val) {
 }
 
 void profiler_add_time_record(task_node_t node, char type, int worker) {
-	double time = ant_get_curtime();
+	double time = profiler_get_curtime();
 	time_record_t record = profiler_create_time_record(type, worker, time);
 	if (node->time_record == NULL)
 		node->time_record = record;
@@ -305,23 +318,10 @@ void profiler_add_time_record(task_node_t node, char type, int worker) {
 	}
 }
 
-void profiler_add_time_record_wthread(task_node_t node, char type, struct myth_thread * thread) {
-	double time = ant_get_curtime();
+void profiler_add_time_record_wthread(task_node_t node, char type, void * thread_p) {
+	myth_thread_t thread = (myth_thread_t) thread_p;
 	int worker = (thread)?thread->env->rank:-1;
-	time_record_t record = profiler_create_time_record(type, worker, time);
-	if (node->time_record == NULL)
-		node->time_record = record;
-	else {
-		time_record_t temp = node->time_record;
-		while (temp->next != NULL)
-			temp = temp->next;
-		temp->next = record;
-	}
-}
-
-void profiler_init(int worker_thread_num) {
-	profiler_create_root_node();
-	profiler_create_sched_nodes(worker_thread_num);
+	profiler_add_time_record(node, type, worker);
 }
 
 task_node_t profiler_get_root_node() {

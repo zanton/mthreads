@@ -30,7 +30,8 @@ libmyth_la-myth_malloc_wrapper.lo: myth_malloc_wrapper.c \
  /usr/include/i386-linux-gnu/bits/select2.h \
  /usr/include/i386-linux-gnu/sys/sysmacros.h \
  /usr/include/i386-linux-gnu/bits/pthreadtypes.h /usr/include/alloca.h \
- /usr/include/i386-linux-gnu/bits/stdlib.h myth_sched_func.h \
+ /usr/include/i386-linux-gnu/bits/stdlib.h myth_profiler.h \
+ /usr/include/i386-linux-gnu/sys/time.h myth_sched_func.h \
  /usr/include/unistd.h /usr/include/i386-linux-gnu/bits/posix_opt.h \
  /usr/include/i386-linux-gnu/bits/environments.h \
  /usr/include/i386-linux-gnu/bits/confname.h /usr/include/getopt.h \
@@ -61,10 +62,8 @@ libmyth_la-myth_malloc_wrapper.lo: myth_malloc_wrapper.c \
  /usr/include/asm-generic/sockios.h \
  /usr/include/i386-linux-gnu/bits/socket2.h myth_wsqueue.h \
  myth_internal_lock.h myth_wsqueue_func.h myth_desc.h myth_worker.h \
- myth_io.h myth_log.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h myth_wsqueue_proto.h \
- myth_worker_func.h /usr/include/signal.h \
- /usr/include/i386-linux-gnu/bits/signum.h \
+ myth_io.h myth_log.h myth_wsqueue_proto.h myth_worker_func.h \
+ /usr/include/signal.h /usr/include/i386-linux-gnu/bits/signum.h \
  /usr/include/i386-linux-gnu/bits/siginfo.h \
  /usr/include/i386-linux-gnu/bits/sigaction.h \
  /usr/include/i386-linux-gnu/bits/sigcontext.h \
@@ -178,6 +177,10 @@ myth_context.h:
 
 /usr/include/i386-linux-gnu/bits/stdlib.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_sched_func.h:
 
 /usr/include/unistd.h:
@@ -275,10 +278,6 @@ myth_worker.h:
 myth_io.h:
 
 myth_log.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_wsqueue_proto.h:
 

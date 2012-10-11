@@ -1,20 +1,21 @@
-libmyth_la-myth_profiler.lo: myth_profiler.c myth_profiler.h \
- /usr/include/stdio.h /usr/include/features.h \
+libmyth_la-myth_profiler.lo: myth_profiler.c \
+ /usr/include/i386-linux-gnu/sys/stat.h /usr/include/features.h \
  /usr/include/i386-linux-gnu/bits/predefs.h \
  /usr/include/i386-linux-gnu/sys/cdefs.h \
  /usr/include/i386-linux-gnu/bits/wordsize.h \
  /usr/include/i386-linux-gnu/gnu/stubs.h \
  /usr/include/i386-linux-gnu/gnu/stubs-32.h \
- /usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h \
  /usr/include/i386-linux-gnu/bits/types.h \
- /usr/include/i386-linux-gnu/bits/typesizes.h /usr/include/libio.h \
- /usr/include/_G_config.h /usr/include/wchar.h \
+ /usr/include/i386-linux-gnu/bits/typesizes.h /usr/include/time.h \
+ /usr/include/i386-linux-gnu/bits/stat.h myth_profiler.h \
+ /usr/include/stdio.h /usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h \
+ /usr/include/libio.h /usr/include/_G_config.h /usr/include/wchar.h \
  /usr/lib/gcc/i686-linux-gnu/4.6/include/stdarg.h \
  /usr/include/i386-linux-gnu/bits/stdio_lim.h \
  /usr/include/i386-linux-gnu/bits/sys_errlist.h \
  /usr/include/i386-linux-gnu/bits/stdio.h \
  /usr/include/i386-linux-gnu/bits/stdio2.h \
- /usr/include/i386-linux-gnu/sys/time.h /usr/include/time.h \
+ /usr/include/i386-linux-gnu/sys/time.h \
  /usr/include/i386-linux-gnu/bits/time.h \
  /usr/include/i386-linux-gnu/sys/select.h \
  /usr/include/i386-linux-gnu/bits/select.h \
@@ -63,9 +64,7 @@ libmyth_la-myth_profiler.lo: myth_profiler.c myth_profiler.h \
  myth_context.h myth_io.h myth_internal_lock.h myth_mem_barrier.h \
  myth_log.h myth_wsqueue.h myth_desc.h
 
-myth_profiler.h:
-
-/usr/include/stdio.h:
+/usr/include/i386-linux-gnu/sys/stat.h:
 
 /usr/include/features.h:
 
@@ -79,11 +78,19 @@ myth_profiler.h:
 
 /usr/include/i386-linux-gnu/gnu/stubs-32.h:
 
-/usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h:
-
 /usr/include/i386-linux-gnu/bits/types.h:
 
 /usr/include/i386-linux-gnu/bits/typesizes.h:
+
+/usr/include/time.h:
+
+/usr/include/i386-linux-gnu/bits/stat.h:
+
+myth_profiler.h:
+
+/usr/include/stdio.h:
+
+/usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h:
 
 /usr/include/libio.h:
 
@@ -102,8 +109,6 @@ myth_profiler.h:
 /usr/include/i386-linux-gnu/bits/stdio2.h:
 
 /usr/include/i386-linux-gnu/sys/time.h:
-
-/usr/include/time.h:
 
 /usr/include/i386-linux-gnu/bits/time.h:
 

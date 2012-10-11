@@ -10,8 +10,8 @@
 
 #include <stdio.h>
 #include <sys/time.h>
-#include "myth_misc.h"
-#include "myth_worker.h"
+//#include "myth_misc.h"
+//#include "myth_worker.h"
 
 typedef struct time_record {
 	char type; // 0: start, 1: stop
@@ -24,17 +24,18 @@ typedef struct time_record {
 typedef struct task_node {
 	int level;
 	int index;
-	double running_time, running_time2;
+	double running_time;
 	time_record_t time_record;
 	struct task_node * mate;
 	struct task_node * child;
 } task_node, * task_node_t;
 
+double profiler_get_curtime();
 void profiler_init(int worker_thread_num);
-task_node_t profiler_create_new_node(task_node_t parent, struct myth_running_env * env);
+task_node_t profiler_create_new_node(task_node_t parent);
 void profiler_output_data();
 void profiler_add_time_record(task_node_t node, char type, int worker);
-void profiler_add_time_record_wthread(task_node_t node, char type, struct myth_thread * thread);
+void profiler_add_time_record_wthread(task_node_t node, char type, void * thread);
 task_node_t profiler_get_root_node();
 task_node_t profiler_get_sched_node(int i);
 

@@ -25,13 +25,7 @@
 #include "myth_io.h"
 #include "myth_io_proto.h"
 
-// Ant: include myth_profiler.h
-#include "myth_profiler.h"
-
 extern size_t g_default_stack_size;
-
-// Ant: prototype of ant_get_curtime()
-//static inline double ant_get_curtime();
 
 #ifndef PAGE_ALIGN
 #define PAGE_ALIGN(n) ((((n)+(PAGE_SIZE)-1)/(PAGE_SIZE))*PAGE_SIZE)
@@ -368,9 +362,6 @@ MYTH_CTX_CALLBACK void myth_create_1(void *arg1,void *arg2,void *arg3)
 	myth_running_env_t env=arg1;
 	myth_thread_t new_thread=arg3;
 
-	// Ant: [myth_create_1] initialize context's last_start_time
-	//new_thread->context.last_start_time = ant_get_curtime();
-
 	myth_thread_t this_thread=env->this_thread;
 	myth_func_t fn=(myth_func_t)arg2;
 	t0=0;t1=0;
@@ -471,11 +462,9 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	// Push current thread to runqueue and switch context to new thread
 	this_thread = env->this_thread;
 
-	// Ant: [myth_create_body] set level for new_thread
-	new_thread->level = this_thread->level + 1;
 
 	// Ant: [prof] [myth_create_body] set task_node for new task
-	new_thread->node = (task_node_t) profiler_create_new_node(this_thread->node, env);
+	new_thread->node = (task_node_t) profiler_create_new_node(this_thread->node);
 	new_thread->context.node = new_thread->node;
 	new_thread->context.thread = new_thread;
 
@@ -921,27 +910,9 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 	myth_internal_lock_lock(&this_thread->lock);
 	myth_thread_t wait_thread=this_thread_v->join_thread;
 
-	// Ant: [myth_entry_point_cleanup] task finishes
-	this_thread->context.running_time += ant_get_curtime() - this_thread->context.last_start_time;
-	// Ant: [myth_entry_point_cleanup] save task's data
-	struct node * new_entry = (struct node *) myth_flmalloc(env->rank, sizeof(struct node));
-	new_entry->level = this_thread->level;
-	new_entry->running_time = this_thread->context.running_time;
-	new_entry->next = NULL;
-	if (env->entry == NULL) {
-		env->entry = new_entry;
-	} else {
-		struct node * temp_entry = env->entry;
-		while (temp_entry->next != NULL)
-			temp_entry = temp_entry->next;
-		temp_entry->next = new_entry;
-	}
 
 	// Ant: [prof] [myth_entry_point_cleanup] record time
 	profiler_add_time_record(this_thread->node, 1, env->rank);
-	// Ant: [prof] [myth_entry_point_cleanup] save running_time to task_node
-	task_node_t node = this_thread->node;
-	node->running_time2 = this_thread->context.running_time;
 
 
 	//Execute a thread waiting for current thread

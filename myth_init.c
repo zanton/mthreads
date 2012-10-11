@@ -313,30 +313,6 @@ void myth_emit_log(FILE *fp_prof_out)
 
 void myth_fini_ex_body(void)
 {
-	// Ant: [myth_fini_ex_body] output measured time of workers
-	FILE *fp;
-	fp = fopen("ant_prof.txt", "w");
-	int i;
-	fprintf(fp, "Running time and idle time of worker threads\n");
-	for (i=0; i<g_worker_thread_num; i++) {
-		fprintf(fp, "%d, %0.3lf, %0.3lf\n", i, g_envs[i].running_time, g_envs[i].idle_time);
-	}
-	fprintf(fp, "Running time of user threads, level:time\n");
-	for (i=0; i<g_worker_thread_num; i++) {
-		fprintf(fp, "Worker %d\n", i);
-		struct node * entry = g_envs[i].entry;
-		while (entry != NULL) {
-			fprintf(fp, "%d: %0.3lf", entry->level, entry->running_time);
-			//struct node * temp_entry = entry;
-			entry = entry->next;
-			if (entry != NULL)
-				fprintf(fp, ", ");
-			//myth_flfree(g_envs[i].rank, sizeof(struct node), temp_entry);
-		}
-		fprintf(fp, "\n\n");
-	}
-	fclose(fp);
-
 	// Ant: [prof] [myth_fini_ex_body] output prof data
 	profiler_output_data();
 

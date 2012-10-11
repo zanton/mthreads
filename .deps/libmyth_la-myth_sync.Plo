@@ -58,11 +58,10 @@ libmyth_la-myth_sync.lo: myth_sync.c myth_misc.h /usr/include/stdio.h \
  /usr/include/i386-linux-gnu/asm/sockios.h \
  /usr/include/asm-generic/sockios.h \
  /usr/include/i386-linux-gnu/bits/socket2.h myth_desc.h myth_context.h \
- myth_wsqueue.h myth_internal_lock.h myth_mem_barrier.h myth_worker.h \
- myth_sched.h myth_io.h myth_log.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h myth_sync.h myth_sync_proto.h \
- myth_worker_func.h /usr/include/signal.h \
- /usr/include/i386-linux-gnu/bits/signum.h \
+ myth_profiler.h /usr/include/i386-linux-gnu/sys/time.h myth_wsqueue.h \
+ myth_internal_lock.h myth_mem_barrier.h myth_worker.h myth_sched.h \
+ myth_io.h myth_log.h myth_sync.h myth_sync_proto.h myth_worker_func.h \
+ /usr/include/signal.h /usr/include/i386-linux-gnu/bits/signum.h \
  /usr/include/i386-linux-gnu/bits/siginfo.h \
  /usr/include/i386-linux-gnu/bits/sigaction.h \
  /usr/include/i386-linux-gnu/bits/sigcontext.h \
@@ -253,6 +252,10 @@ myth_desc.h:
 
 myth_context.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_wsqueue.h:
 
 myth_internal_lock.h:
@@ -266,10 +269,6 @@ myth_sched.h:
 myth_io.h:
 
 myth_log.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_sync.h:
 

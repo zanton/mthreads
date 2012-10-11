@@ -79,7 +79,7 @@ typedef struct myth_sched
 	void *stack;//Call stack
 	myth_context context;//Scheduler context
 
-	// Ant: [prof] [struct myth_sched] add task_node_t field
+	// Ant: [prof] [struct myth_sched] pointer to a task_node
 	struct task_node * node;
 }myth_sched,*myth_sched_t;
 

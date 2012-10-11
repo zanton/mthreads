@@ -26,8 +26,6 @@ typedef enum
 //Thread descriptor
 typedef struct myth_thread
 {
-	// Ant: [struct myth_thread] level in task tree
-	int level;
 	// Ant: [prof] [struct myth_thread] pointer to a task_node
 	task_node_t node;
 

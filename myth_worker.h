@@ -9,16 +9,6 @@
 #include "myth_log.h"
 #include "myth_wsqueue.h"
 
-// Ant: include myth_profiler.h
-#include "myth_profiler.h"
-
-// Ant: [task] struct node: structure to save tasks' running time
-struct node {
-	int level;
-	double running_time;
-	struct node * next;
-};
-
 //A structure describing an environment for executing a thread
 //(scheduler, worker thread, runqueue, etc...)
 //Each worker thread have one of them
@@ -56,11 +46,6 @@ typedef struct myth_running_env
 	//-1:Main thread, must not be terminated at the scheduling loop
 	//0:Currently application is running
 	//1:Application is terminated. Worker thread should exit scheduling loop and terminate itself
-
-	// Ant: [struct myth_running_env] additional fields
-	double running_time, idle_time;
-	int entry_num;
-	struct node * entry;
 
 }__attribute__((aligned(CACHE_LINE_SIZE))) myth_running_env,*myth_running_env_t;
 

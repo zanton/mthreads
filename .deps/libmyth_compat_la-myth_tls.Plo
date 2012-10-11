@@ -51,7 +51,8 @@ libmyth_compat_la-myth_tls.lo: myth_tls.c myth_internal_lock.h \
  /usr/include/i386-linux-gnu/bits/waitstatus.h /usr/include/alloca.h \
  /usr/include/i386-linux-gnu/bits/stdlib.h \
  /usr/lib/gcc/i686-linux-gnu/4.6/include/stdint.h /usr/include/stdint.h \
- /usr/include/i386-linux-gnu/bits/wchar.h myth_wsqueue.h \
+ /usr/include/i386-linux-gnu/bits/wchar.h myth_profiler.h \
+ /usr/include/i386-linux-gnu/sys/time.h myth_wsqueue.h \
  /usr/include/string.h /usr/include/i386-linux-gnu/bits/string.h \
  /usr/include/i386-linux-gnu/bits/string2.h \
  /usr/include/i386-linux-gnu/bits/string3.h myth_misc.h \
@@ -59,8 +60,7 @@ libmyth_compat_la-myth_tls.lo: myth_tls.c myth_internal_lock.h \
  /usr/include/i386-linux-gnu/bits/environments.h \
  /usr/include/i386-linux-gnu/bits/confname.h /usr/include/getopt.h \
  /usr/include/i386-linux-gnu/bits/unistd.h myth_worker.h myth_sched.h \
- myth_io.h myth_log.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h
+ myth_io.h myth_log.h
 
 myth_internal_lock.h:
 
@@ -212,6 +212,10 @@ myth_context.h:
 
 /usr/include/i386-linux-gnu/bits/wchar.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_wsqueue.h:
 
 /usr/include/string.h:
@@ -243,7 +247,3 @@ myth_sched.h:
 myth_io.h:
 
 myth_log.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:

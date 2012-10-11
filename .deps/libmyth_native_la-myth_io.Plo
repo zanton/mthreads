@@ -30,8 +30,9 @@ libmyth_native_la-myth_io.lo: myth_io.c /usr/include/assert.h \
  /usr/include/i386-linux-gnu/bits/stdlib.h \
  /usr/lib/gcc/i686-linux-gnu/4.6/include/stdint.h /usr/include/stdint.h \
  /usr/include/i386-linux-gnu/bits/wchar.h myth_config.h config.h \
- myth_wsqueue.h myth_internal_lock.h myth_mem_barrier.h \
- myth_original_lib.h /usr/include/pthread.h /usr/include/sched.h \
+ myth_profiler.h /usr/include/i386-linux-gnu/sys/time.h myth_wsqueue.h \
+ myth_internal_lock.h myth_mem_barrier.h myth_original_lib.h \
+ /usr/include/pthread.h /usr/include/sched.h \
  /usr/include/i386-linux-gnu/bits/sched.h \
  /usr/include/i386-linux-gnu/bits/timex.h \
  /usr/include/i386-linux-gnu/bits/setjmp.h /usr/include/errno.h \
@@ -59,9 +60,8 @@ libmyth_native_la-myth_io.lo: myth_io.c /usr/include/assert.h \
  /usr/include/i386-linux-gnu/bits/environments.h \
  /usr/include/i386-linux-gnu/bits/confname.h /usr/include/getopt.h \
  /usr/include/i386-linux-gnu/bits/unistd.h myth_worker.h myth_sched.h \
- myth_io.h myth_log.h myth_profiler.h \
- /usr/include/i386-linux-gnu/sys/time.h myth_io_proto.h \
- /usr/include/fcntl.h /usr/include/i386-linux-gnu/bits/fcntl.h \
+ myth_io.h myth_log.h myth_io_proto.h /usr/include/fcntl.h \
+ /usr/include/i386-linux-gnu/bits/fcntl.h \
  /usr/include/i386-linux-gnu/bits/stat.h \
  /usr/include/i386-linux-gnu/bits/fcntl2.h \
  /usr/include/i386-linux-gnu/sys/epoll.h myth_worker_func.h \
@@ -178,6 +178,10 @@ myth_config.h:
 
 config.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_wsqueue.h:
 
 myth_internal_lock.h:
@@ -265,10 +269,6 @@ myth_sched.h:
 myth_io.h:
 
 myth_log.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_io_proto.h:
 

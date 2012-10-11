@@ -28,7 +28,8 @@ libmyth_la-myth_context_gvar.lo: myth_context_gvar.c myth_config.h \
  /usr/include/i386-linux-gnu/bits/pthreadtypes.h /usr/include/alloca.h \
  /usr/include/i386-linux-gnu/bits/stdlib.h \
  /usr/lib/gcc/i686-linux-gnu/4.6/include/stdint.h /usr/include/stdint.h \
- /usr/include/i386-linux-gnu/bits/wchar.h
+ /usr/include/i386-linux-gnu/bits/wchar.h myth_profiler.h \
+ /usr/include/i386-linux-gnu/sys/time.h
 
 myth_config.h:
 
@@ -113,3 +114,7 @@ myth_context.h:
 /usr/include/stdint.h:
 
 /usr/include/i386-linux-gnu/bits/wchar.h:
+
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:

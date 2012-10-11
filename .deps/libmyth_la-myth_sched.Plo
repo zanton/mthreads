@@ -74,8 +74,8 @@ libmyth_la-myth_sched.lo: myth_sched.c /usr/include/signal.h \
  /usr/include/i386-linux-gnu/bits/unistd.h \
  /usr/include/i386-linux-gnu/sys/mman.h \
  /usr/include/i386-linux-gnu/bits/mman.h myth_sched.h myth_context.h \
- myth_wsqueue_func.h myth_desc.h myth_worker.h myth_io.h myth_log.h \
  myth_profiler.h /usr/include/i386-linux-gnu/sys/time.h \
+ myth_wsqueue_func.h myth_desc.h myth_worker.h myth_io.h myth_log.h \
  myth_wsqueue_proto.h myth_sched_func.h myth_worker_func.h \
  myth_malloc_wrapper.h myth_sched_proto.h myth_log_func.h myth_init.h \
  myth_io_func.h /usr/include/fcntl.h \
@@ -297,6 +297,10 @@ myth_sched.h:
 
 myth_context.h:
 
+myth_profiler.h:
+
+/usr/include/i386-linux-gnu/sys/time.h:
+
 myth_wsqueue_func.h:
 
 myth_desc.h:
@@ -306,10 +310,6 @@ myth_worker.h:
 myth_io.h:
 
 myth_log.h:
-
-myth_profiler.h:
-
-/usr/include/i386-linux-gnu/sys/time.h:
 
 myth_wsqueue_proto.h:
 
