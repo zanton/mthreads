@@ -103,6 +103,8 @@ task_node_t profiler_create_new_node(task_node_t parent) {
 	new_node = (task_node_t) myth_malloc(sizeof(task_node));
 	double time2 = profiler_get_curtime();
 	profiler_add_malloctn_item(time2 - time1);
+	double time3 = profiler_get_curtime();
+	profiler_add_malloctr_item(time3 - time2);
 
 	// Set up fields
 	new_node->level = parent->level + 1;
@@ -333,14 +335,14 @@ void profiler_output_data() {
 	// Test: Output
 	fp = fopen("./prof/test_data.txt", "w");
 	double sum = 0;
-	fprintf(fp, "Malloc task node: %d items\n", n_malloctn);
+	fprintf(fp, "myth_malloc: %d items\n", n_malloctn);
 	for (i=0; i<n_malloctn; i++) {
 		if (i % 10 == 0 && i != 0)
 			fprintf(fp, "\n");
 		fprintf(fp, "%0.3lf ", malloctn[i]);
 		sum += malloctn[i];
 	}
-	fprintf(fp, "\nAverage = %0.3lf\n\nMalloc time record: %d items\n", sum/n_malloctn, n_malloctr);
+	fprintf(fp, "\nAverage = %0.3lf\n\nprofiler_add_malloctn_item() + get_curtime: %d items\n", sum/n_malloctn, n_malloctr);
 	sum = 0;
 	for (i=0; i<n_malloctr; i++) {
 		if (i % 10 == 0 && i != 0)
@@ -356,13 +358,7 @@ void profiler_output_data() {
 
 time_record_t profiler_create_time_record(char type, int worker, double val) {
 	time_record_t record;
-
-	// Test
-	double time1 = profiler_get_curtime();
 	record = (time_record_t) myth_malloc(sizeof(time_record));
-	double time2 = profiler_get_curtime();
-	profiler_add_malloctr_item(time2 - time1);
-
 	record->type = type;
 	record->worker = worker;
 	record->val = val;
