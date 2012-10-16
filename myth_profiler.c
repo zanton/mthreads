@@ -333,7 +333,7 @@ void profiler_output_data() {
 	fclose(fp);
 
 	// Test: Output
-	fp = fopen("./prof/test_data.txt", "w");
+	fp = fopen("./prof/mythmalloc_time_data.txt", "w");
 	double sum = 0;
 	fprintf(fp, "myth_malloc: %d items\n", n_malloctn);
 	for (i=0; i<n_malloctn; i++) {
@@ -342,7 +342,7 @@ void profiler_output_data() {
 		fprintf(fp, "%0.3lf ", malloctn[i]);
 		sum += malloctn[i];
 	}
-	fprintf(fp, "\nAverage = %0.3lf\n\nprofiler_add_malloctn_item() + get_curtime: %d items\n", sum/n_malloctn, n_malloctr);
+	fprintf(fp, "\nAverage = %0.3lf\n\nprofiler_add_malloctn_item(): %d items\n", sum/n_malloctn, n_malloctr);
 	sum = 0;
 	for (i=0; i<n_malloctr; i++) {
 		if (i % 10 == 0 && i != 0)
