@@ -15,7 +15,13 @@ task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
 int sched_num = 0;
 
-double base = 0;
+double base = 0;  // base value for time
+
+// For memory allocator
+task_node_t node_mem;
+time_record_t record_mem;
+int n_nodes, n_records;
+int N_nodes, N_records;
 
 double profiler_get_curtime()
 {
@@ -56,18 +62,53 @@ void create_sched_nodes(int num) {
 	}
 }
 
+void init_memory_allocator() {
+	N_nodes = 30;
+	N_records = 100;
+	node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
+	record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
+	n_nodes = N_nodes;
+	n_records = N_records;
+}
+
 void profiler_init(int worker_thread_num) {
 	create_root_node();
 	create_sched_nodes(worker_thread_num);
+	init_memory_allocator();
+}
+
+task_node_t profiler_malloc_task_node() {
+	if (n_nodes == 0) {
+		N_nodes *= 2;
+		node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
+		n_nodes = N_nodes;
+	}
+	n_nodes--;
+	return node_mem++;
+}
+
+time_record_t profiler_malloc_time_record() {
+	if (n_records == 0) {
+		N_records *= 2;
+		record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
+		n_records = N_records;
+	}
+	n_records--;
+	return record_mem++;
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
 	task_node_t new_node;
 	// Allocate memory
 	//new_node = (task_node_t) myth_flmalloc(env->rank, sizeof(task_node));
-	new_node = (task_node_t) myth_malloc(sizeof(task_node));
+	//new_node = (task_node_t) myth_malloc(sizeof(task_node));
+	new_node = profiler_malloc_task_node();
 	// Set up fields
 	new_node->level = parent->level + 1;
+
+	if (new_node->level == 2)
+		printf("profiler_create_new_node at %0.3lf\n", profiler_get_curtime());
+
 	new_node->index = 0;  // need edited later
 	new_node->mate = NULL;
 	new_node->child = NULL;
@@ -187,6 +228,7 @@ void output_time_records(FILE * fp) {
 		double temp = sched_nodes[i].time_record->val;
 		if (temp < base) base = temp;
 	}
+	fprintf(fp, "time base = %0.3lf\n", base);
 	// Schedulers' time records
 	for (i=0; i<sched_num; i++) {
 		fprintf(fp, "Scheduler %d: ", i);
@@ -297,7 +339,8 @@ void profiler_output_data() {
 
 time_record_t create_time_record(char type, int worker, double val) {
 	time_record_t record;
-	record = (time_record_t) myth_malloc(sizeof(time_record));
+	//record = (time_record_t) myth_malloc(sizeof(time_record));
+	record = profiler_malloc_time_record();
 	record->type = type;
 	record->worker = worker;
 	record->val = val;
