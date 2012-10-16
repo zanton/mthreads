@@ -24,7 +24,7 @@ double profiler_get_curtime()
 	return tv.tv_sec * 1.0E+3 + tv.tv_usec * 1.0E-3;
 }
 
-void profiler_create_root_node() {
+void create_root_node() {
 	if  (root_node == NULL) {
 		// Allocate memory
 		root_node = (task_node_t) myth_malloc(sizeof(task_node));
@@ -38,7 +38,7 @@ void profiler_create_root_node() {
 	}
 }
 
-void profiler_create_sched_nodes(int num) {
+void create_sched_nodes(int num) {
 	if (sched_nodes == NULL) {
 		sched_num = num;
 		// Allocate memory
@@ -57,8 +57,8 @@ void profiler_create_sched_nodes(int num) {
 }
 
 void profiler_init(int worker_thread_num) {
-	profiler_create_root_node();
-	profiler_create_sched_nodes(worker_thread_num);
+	create_root_node();
+	create_sched_nodes(worker_thread_num);
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
@@ -87,17 +87,17 @@ task_node_t profiler_create_new_node(task_node_t parent) {
 	return new_node;
 }
 
-int profiler_indexing_tasks(task_node_t node, int index) {
+int indexing_tasks(task_node_t node, int index) {
 	node->index = index;
 	int i = index + 1;
 	if (node->child != NULL)
-		i = profiler_indexing_tasks(node->child, i);
+		i = indexing_tasks(node->child, i);
 	if (node->mate != NULL)
-		i = profiler_indexing_tasks(node->mate, i);
+		i = indexing_tasks(node->mate, i);
 	return i;
 }
 
-void profiler_output_task_tree(FILE * fp, task_node_t node) {
+void output_task_tree(FILE * fp, task_node_t node) {
 	if (node->child == NULL)
 		return;
 	// Output all level-1 children
@@ -116,20 +116,20 @@ void profiler_output_task_tree(FILE * fp, task_node_t node) {
 	// Output all subtrees
 	child = node->child;
 	while (child != NULL) {
-		profiler_output_task_tree(fp, child);
+		output_task_tree(fp, child);
 		child = child->mate;
 	}
 }
 
-void profiler_output_running_time(FILE * fp, task_node_t node) {
+void output_running_time(FILE * fp, task_node_t node) {
 	fprintf(fp, "%d [label=\"%d\\n%0.3lf\"]\n", node->index, node->index, node->running_time);
 	if (node->child != NULL)
-		profiler_output_running_time(fp, node->child);
+		output_running_time(fp, node->child);
 	if (node->mate != NULL)
-		profiler_output_running_time(fp, node->mate);
+		output_running_time(fp, node->mate);
 }
 
-void profiler_calculate_running_time_ex(task_node_t node) {
+void calculate_running_time_ex(task_node_t node) {
 	time_record_t t = node->time_record;
 
 	// Adhoc for task 0, and scheduler 0
@@ -149,15 +149,15 @@ void profiler_calculate_running_time_ex(task_node_t node) {
 	node->running_time = val;
 }
 
-void profiler_calculate_running_time_1(task_node_t node) {
-	profiler_calculate_running_time_ex(node);
+void calculate_running_time_1(task_node_t node) {
+	calculate_running_time_ex(node);
 	if (node->child != NULL)
-		profiler_calculate_running_time_1(node->child);
+		calculate_running_time_1(node->child);
 	if (node->mate != NULL)
-		profiler_calculate_running_time_1(node->mate);
+		calculate_running_time_1(node->mate);
 }
 
-void profiler_output_time_records_ex(FILE * fp, task_node_t node) {
+void output_time_records_ex(FILE * fp, task_node_t node) {
 	time_record_t t = node->time_record;
 	while (t != NULL) {
 		fprintf(fp, "%d:%d:%0.3lf", t->type, t->worker, t->val - base);
@@ -169,16 +169,16 @@ void profiler_output_time_records_ex(FILE * fp, task_node_t node) {
 	}
 }
 
-void profiler_output_time_records_1(FILE * fp, task_node_t node) {
+void output_time_records_1(FILE * fp, task_node_t node) {
 	fprintf(fp, "Task %d: ", node->index);
-	profiler_output_time_records_ex(fp, node);
+	output_time_records_ex(fp, node);
 	if (node->child != NULL)
-		profiler_output_time_records_1(fp, node->child);
+		output_time_records_1(fp, node->child);
 	if (node->mate != NULL)
-		profiler_output_time_records_1(fp, node->mate);
+		output_time_records_1(fp, node->mate);
 }
 
-void profiler_output_time_records(FILE * fp) {
+void output_time_records(FILE * fp) {
 	fprintf(fp, "\n\ntime records\n");
 	int i;
 	// Get time base
@@ -190,13 +190,13 @@ void profiler_output_time_records(FILE * fp) {
 	// Schedulers' time records
 	for (i=0; i<sched_num; i++) {
 		fprintf(fp, "Scheduler %d: ", i);
-		profiler_output_time_records_ex(fp, &sched_nodes[i]);
+		output_time_records_ex(fp, &sched_nodes[i]);
 	}
 	// Tasks' time records
-	profiler_output_time_records_1(fp, root_node);
+	output_time_records_1(fp, root_node);
 }
 
-void profiler_output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
+void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 	fprintf(fp, "%d [label=\"%d | ", node->index, node->index);
 	time_record_t t = node->time_record;
 	int count = 0;
@@ -218,15 +218,15 @@ void profiler_output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 	fprintf(fp, "\"]\n");
 }
 
-void profiler_output_task_tree_wtime_1(FILE * fp, task_node_t node) {
-	profiler_output_task_tree_wtime_ex(fp, node);
+void output_task_tree_wtime_1(FILE * fp, task_node_t node) {
+	output_task_tree_wtime_ex(fp, node);
 	if (node->child != NULL)
-		profiler_output_task_tree_wtime_1(fp, node->child);
+		output_task_tree_wtime_1(fp, node->child);
 	if (node->mate != NULL)
-		profiler_output_task_tree_wtime_1(fp, node->mate);
+		output_task_tree_wtime_1(fp, node->mate);
 }
 
-void profiler_output_task_tree_wtime_arcs(FILE * fp, task_node_t node) {
+void output_task_tree_wtime_arcs(FILE * fp, task_node_t node) {
 	if (node->child == NULL)
 		return;
 	// Output all level-1 children
@@ -242,14 +242,14 @@ void profiler_output_task_tree_wtime_arcs(FILE * fp, task_node_t node) {
 	// Output all subtrees
 	child = node->child;
 	while (child != NULL) {
-		profiler_output_task_tree_wtime_arcs(fp, child);
+		output_task_tree_wtime_arcs(fp, child);
 		child = child->mate;
 	}
 }
 
-void profiler_output_task_tree_wtime(FILE * fp) {
-	profiler_output_task_tree_wtime_1(fp, root_node);
-	profiler_output_task_tree_wtime_arcs(fp, root_node);
+void output_task_tree_wtime(FILE * fp) {
+	output_task_tree_wtime_1(fp, root_node);
+	output_task_tree_wtime_arcs(fp, root_node);
 }
 
 void profiler_output_data() {
@@ -260,13 +260,13 @@ void profiler_output_data() {
 
 	// Indexing tasks
 	root_node->index = 0;
-	profiler_indexing_tasks(root_node->child, 1);
+	indexing_tasks(root_node->child, 1);
 
 	// Calculate running time
 	int i;
 	for (i=0; i<sched_num; i++)
-		profiler_calculate_running_time_ex(&sched_nodes[i]);
-	profiler_calculate_running_time_1(root_node);
+		calculate_running_time_ex(&sched_nodes[i]);
+	calculate_running_time_1(root_node);
 
 	// Output data
 	FILE *fp;
@@ -274,28 +274,28 @@ void profiler_output_data() {
 	// Task tree
 	fp = fopen("./prof/task_tree.dot", "w");
 	fprintf(fp, "digraph g{\n");
-	profiler_output_task_tree(fp, root_node);
-	profiler_output_running_time(fp, root_node);
+	output_task_tree(fp, root_node);
+	output_running_time(fp, root_node);
 	fprintf(fp, "\n}");
 	fclose(fp);
 
 	// Time records
 	fp = fopen("./prof/time_records.txt", "w");
-	profiler_output_time_records(fp);
+	output_time_records(fp);
 	fclose(fp);
 
 	// Task tree with time records
 	fp = fopen("./prof/task_tree_w_time_records.dot", "w");
 	fprintf(fp, "// task tree with time records\n");
 	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
-	profiler_output_task_tree_wtime(fp);
+	output_task_tree_wtime(fp);
 	fprintf(fp, "\n}");
 	fclose(fp);
 
 	printf("\nProfiler's output ended.\n");
 }
 
-time_record_t profiler_create_time_record(char type, int worker, double val) {
+time_record_t create_time_record(char type, int worker, double val) {
 	time_record_t record;
 	record = (time_record_t) myth_malloc(sizeof(time_record));
 	record->type = type;
@@ -307,7 +307,7 @@ time_record_t profiler_create_time_record(char type, int worker, double val) {
 
 void profiler_add_time_record(task_node_t node, char type, int worker) {
 	double time = profiler_get_curtime();
-	time_record_t record = profiler_create_time_record(type, worker, time);
+	time_record_t record = create_time_record(type, worker, time);
 	if (node->time_record == NULL)
 		node->time_record = record;
 	else {
