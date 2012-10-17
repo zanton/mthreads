@@ -249,19 +249,19 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 	time_record_t t = node->time_record;
 	int count = 0;
 	if (node->index == 0) {
-		fprintf(fp, "{<b%d> |<s%d>%d:%0.3lf} | ", count, count, t->worker, t->val - base);
+		fprintf(fp, "{<b%d> |<s%d>(%c)(%d):%0.3lf} | ", count, count, (t->type == 0)?'s':'e', t->worker, t->val - base);
 		count++;
 		t = t->next;
 	}
 	while (t != NULL && t->next != NULL) {
-		fprintf(fp, "{<b%d>%d:%0.3lf|<s%d>%d:%0.3lf}", count, t->worker, t->val - base, count, t->next->worker, t->next->val - base);
+		fprintf(fp, "{<b%d>(%c)(%d):%0.3lf|<s%d>(%c)(%d):%0.3lf}", count, (t->type == 0)?'s':'e', t->worker, t->val - base, count, (t->next->type == 0)?'s':'e', t->next->worker, t->next->val - base);
 		count++;
 		t = t->next->next;
 		if (t != NULL)
 			fprintf(fp, " | ");
 	}
 	if (node->index == 0) {
-		fprintf(fp, "{<b%d>%d:%0.3lf|<s%d> }", count, t->worker, t->val - base, count);
+		fprintf(fp, "{<b%d>(%c)(%d):%0.3lf|<s%d> }", count, (t->type == 0)?'s':'e', t->worker, t->val - base, count);
 	}
 	fprintf(fp, "\"]\n");
 }
