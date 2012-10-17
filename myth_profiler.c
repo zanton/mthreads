@@ -23,6 +23,10 @@ time_record_t record_mem;
 int n_nodes, n_records;
 int N_nodes, N_records;
 
+// Temp
+double tempdata[2];
+int n_tempdata;
+
 double profiler_get_curtime()
 {
 	struct timeval tv;
@@ -75,6 +79,9 @@ void profiler_init(int worker_thread_num) {
 	create_root_node();
 	create_sched_nodes(worker_thread_num);
 	init_memory_allocator();
+
+	// Temp
+	n_tempdata = 0;
 }
 
 task_node_t profiler_malloc_task_node() {
@@ -98,6 +105,9 @@ time_record_t profiler_malloc_time_record() {
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
+	if (parent->level == 1)
+			tempdata[n_tempdata++] = profiler_get_curtime();
+
 	task_node_t new_node;
 	// Allocate memory
 	//new_node = (task_node_t) myth_flmalloc(env->rank, sizeof(task_node));
@@ -105,10 +115,6 @@ task_node_t profiler_create_new_node(task_node_t parent) {
 	new_node = profiler_malloc_task_node();
 	// Set up fields
 	new_node->level = parent->level + 1;
-
-	if (new_node->level == 2)
-		printf("profiler_create_new_node at %0.3lf\n", profiler_get_curtime());
-
 	new_node->index = 0;  // need edited later
 	new_node->mate = NULL;
 	new_node->child = NULL;
@@ -295,7 +301,7 @@ void output_task_tree_wtime(FILE * fp) {
 }
 
 void profiler_output_data() {
-	printf("Profiler's output begins...");
+	printf("Profiler's output begins...\n");
 
 	// Make prof folder
 	mkdir("./prof", S_IRWXU | S_IRWXG | S_IROTH);
@@ -334,7 +340,12 @@ void profiler_output_data() {
 	fprintf(fp, "\n}");
 	fclose(fp);
 
-	printf("\nProfiler's output ended.\n");
+	// Temp
+	printf("profiler_create_new_node at:\n");
+	for (i=0; i<n_tempdata; i++)
+		printf("%0.3lf\n", tempdata[i] - base);
+
+	printf("Profiler's output ended.\n");
 }
 
 time_record_t create_time_record(char type, int worker, double val) {
