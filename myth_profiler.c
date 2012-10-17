@@ -67,8 +67,8 @@ void create_sched_nodes(int num) {
 }
 
 void init_memory_allocator() {
-	N_nodes = 30;
-	N_records = 100;
+	N_nodes = 1;
+	N_records = 1;
 	node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
 	record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
 	n_nodes = N_nodes;
@@ -105,8 +105,8 @@ time_record_t profiler_malloc_time_record() {
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
-	if (parent->level == 1)
-			tempdata[n_tempdata++] = profiler_get_curtime();
+	//if (parent->level == 1)
+			//tempdata[n_tempdata++] = profiler_get_curtime();
 
 	task_node_t new_node;
 	// Allocate memory
@@ -337,13 +337,13 @@ void profiler_output_data() {
 	fprintf(fp, "// task tree with time records\n");
 	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
 	output_task_tree_wtime(fp);
+
+	// Print temp data
+	for (i=0; i<n_tempdata; i++)
+		fprintf(fp, "%0.3lf\n", tempdata[i] - base);
+
 	fprintf(fp, "\n}");
 	fclose(fp);
-
-	// Temp
-	printf("profiler_create_new_node at:\n");
-	for (i=0; i<n_tempdata; i++)
-		printf("%0.3lf\n", tempdata[i] - base);
 
 	printf("Profiler's output ended.\n");
 }
