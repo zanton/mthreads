@@ -10,6 +10,7 @@
 #include "myth_misc.h"
 #include "myth_worker.h"
 #include "myth_desc.h"
+#include "myth_internal_lock.h"
 
 task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
@@ -22,6 +23,7 @@ task_node_t node_mem;
 time_record_t record_mem;
 int n_nodes, n_records;
 int N_nodes, N_records;
+myth_internal_lock_t * node_mem_lock, * record_mem_lock;
 
 // Temp
 double tempdata[2];
@@ -67,12 +69,18 @@ void create_sched_nodes(int num) {
 }
 
 void init_memory_allocator() {
+	// Task node memory
 	N_nodes = 1;
-	N_records = 1;
 	node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
-	record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
 	n_nodes = N_nodes;
+	node_mem_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
+	myth_internal_lock_init(node_mem_lock);
+	// Time record memory
+	N_records = 1;
+	record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
 	n_records = N_records;
+	record_mem_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
+	myth_internal_lock_init(record_mem_lock);
 }
 
 void profiler_init(int worker_thread_num) {
@@ -85,23 +93,31 @@ void profiler_init(int worker_thread_num) {
 }
 
 task_node_t profiler_malloc_task_node() {
+	myth_internal_lock_lock(node_mem_lock);
 	if (n_nodes == 0) {
 		N_nodes *= 2;
 		node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
 		n_nodes = N_nodes;
 	}
+	task_node_t ret = node_mem;
+	node_mem++;
 	n_nodes--;
-	return node_mem++;
+	myth_internal_lock_unlock(node_mem_lock);
+	return ret;
 }
 
 time_record_t profiler_malloc_time_record() {
+	myth_internal_lock_lock(record_mem_lock);
 	if (n_records == 0) {
 		N_records *= 2;
 		record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
 		n_records = N_records;
 	}
+	time_record_t ret = record_mem;
+	record_mem++;
 	n_records--;
-	return record_mem++;
+	myth_internal_lock_unlock(record_mem_lock);
+	return ret;
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
@@ -346,6 +362,7 @@ void profiler_output_data() {
 	fclose(fp);
 
 	printf("Profiler's output ended.\n");
+	profiler_fini();
 }
 
 time_record_t create_time_record(char type, int worker, double val) {
@@ -384,4 +401,9 @@ task_node_t profiler_get_root_node() {
 
 task_node_t profiler_get_sched_node(int i) {
 	return &sched_nodes[i];
+}
+
+void profiler_fini() {
+	myth_internal_lock_destroy(node_mem_lock);
+	myth_internal_lock_destroy(record_mem_lock);
 }
