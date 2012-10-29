@@ -20,6 +20,10 @@
 
 int sched_yield(void)
 {
+	// Ant: [record time] waiting on felock, task stops
+	myth_running_env_t env;
+	env = myth_get_current_env();
+	profiler_add_time_record(env->this_thread->node, 1, env->rank);
 
 	real_sched_yield();
 	myth_yield_body();
@@ -166,6 +170,11 @@ int pthread_mutex_trylock (pthread_mutex_t *mutex)
 
 int pthread_mutex_lock (pthread_mutex_t *mutex)
 {
+	// Ant: [record time] waiting on felock, task stops
+	myth_running_env_t env;
+	env = myth_get_current_env();
+	profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 	handle_mutex_initializer(mutex);
 	myth_mutex_t *mtx=(myth_mutex_t*)&(mutex->__size[0]);
 	myth_mutex_lock_body(*mtx);

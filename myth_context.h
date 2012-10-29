@@ -75,16 +75,16 @@ static inline void myth_make_context_voidcall(myth_context_t ctx, void_func_t fu
 #else
 
 //#define myth_context_switch_hook(ctx)
-// Ant: define myth_context_switch_hook_swap
+// Antx: define myth_context_switch_hook_swap
 static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to)
 {
-	profiler_add_time_record_wthread(from->node, 1, from->thread);
-	profiler_add_time_record_wthread(to->node, 0, to->thread);
+	//profiler_add_time_record_wthread(from->node, 1, from->thread);
+	//profiler_add_time_record_wthread(to->node, 0, to->thread);
 }
-// Ant: define myth_context_switch_hook_set
+// Antx: define myth_context_switch_hook_set
 static void myth_context_switch_hook_set(myth_context_t ctx)
 {
-	profiler_add_time_record_wthread(ctx->node, 0, ctx->thread);
+	//profiler_add_time_record_wthread(ctx->node, 0, ctx->thread);
 }
 
 #endif

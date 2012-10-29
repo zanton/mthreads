@@ -161,6 +161,10 @@ static inline void myth_wait_for_read(int fd,myth_running_env_t env,myth_io_op_t
 		//Switch context
 		next->env=env;
 		env->this_thread=next;
+
+		// Ant: [record time] waiting on READ I/O, task from run queue begins
+		profiler_add_time_record(next->node, 0, env->rank);
+
 		myth_swap_context_withcall(&this_thread->context,&next->context,
 				myth_wait_for_read_1,(void*)env,(void*)op,(void*)fd_data);
 	}
@@ -218,6 +222,10 @@ static inline void myth_wait_for_write(int fd,myth_running_env_t env,myth_io_op_
 		//Switch context
 		next->env=env;
 		env->this_thread=next;
+
+		// Ant: [record time] waiting on WRITE I/O, task from run queue begins
+		profiler_add_time_record(next->node, 0, env->rank);
+
 		myth_swap_context_withcall(&this_thread->context,&next->context,
 				myth_wait_for_write_1,(void*)env,(void*)op,(void*)fd_data);
 	}
@@ -349,6 +357,9 @@ static inline int myth_accept_body (int fd, struct sockaddr* addr,
 	myth_io_cs_enter(env);
 	sock=real_accept(fd,addr,addr_len);
 	if (sock==-1){
+		// Ant: [record time] waiting on READ I/O, task stops
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 		myth_io_op op;
 		if (errno!=EAGAIN && errno!=EWOULDBLOCK){
 			//error
@@ -404,6 +415,12 @@ static inline int myth_select_body(int nfds, fd_set *readfds, fd_set *writefds,
 	while (1){
 		tv_immediate.tv_sec=0;tv_immediate.tv_usec=0;
 		ret=real_select(nfds,readfds,writefds,exceptfds,&tv_immediate);
+
+		// Ant: [record time] myth_select_body(), task stops
+		myth_running_env_t env;
+		env = myth_get_current_env();
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 #ifdef SELECT_ALWAYS_RETURN_IMMEDIATELY
 		if (ret!=0)myth_yield_body();
 		break;
@@ -446,6 +463,9 @@ static inline ssize_t myth_sendto_body(int sockfd, const void *buf, size_t len, 
 	t1=myth_get_rdtsc();
 #endif
 	if (ret==-1){
+		// Ant: [record time] waiting on WRITE I/O, task stops
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 		myth_io_op op;
 		if (errno!=EAGAIN && errno!=EWOULDBLOCK){
 			//error
@@ -501,6 +521,9 @@ static inline ssize_t myth_recvfrom_body(int sockfd, void *buf, size_t len, int 
 	t1=myth_get_rdtsc();
 #endif
 	if (ret==-1){
+		// Ant: [record time] waiting on READ I/O, task stops
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 		myth_io_op op;
 		if (errno!=EAGAIN && errno!=EWOULDBLOCK){
 			//error
@@ -555,6 +578,9 @@ static inline ssize_t myth_send_body (int fd, const void *buf, size_t n, int fla
 	t1=myth_get_rdtsc();
 #endif
 	if (ret==-1){
+		// Ant: [record time] waiting on WRITE I/O, task stops
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 		myth_io_op op;
 		if (errno!=EAGAIN && errno!=EWOULDBLOCK){
 			//error
@@ -607,6 +633,9 @@ static inline ssize_t myth_recv_body (int fd, void *buf, size_t n, int flags)
 	t1=myth_get_rdtsc();
 #endif
 	if (ret==-1){
+		// Ant: [record time] waiting on READ I/O, task stops
+		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 		myth_io_op op;
 		if (errno!=EAGAIN && errno!=EWOULDBLOCK){
 			//error

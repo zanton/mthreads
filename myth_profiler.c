@@ -72,12 +72,14 @@ void init_memory_allocator() {
 	// Task node memory
 	N_nodes = 1;
 	node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
+	myth_assert(new_node != NULL);
 	n_nodes = N_nodes;
 	node_mem_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(node_mem_lock);
 	// Time record memory
 	N_records = 1;
 	record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
+	myth_assert(new_node != NULL);
 	n_records = N_records;
 	record_mem_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(record_mem_lock);
@@ -92,11 +94,16 @@ void profiler_init(int worker_thread_num) {
 	n_tempdata = 0;
 }
 
+void profiler_fini() {
+	myth_internal_lock_destroy(node_mem_lock);
+	myth_internal_lock_destroy(record_mem_lock);
+}
 task_node_t profiler_malloc_task_node() {
 	myth_internal_lock_lock(node_mem_lock);
 	if (n_nodes == 0) {
 		N_nodes *= 2;
 		node_mem = (task_node_t) myth_malloc(N_nodes * sizeof(task_node));
+		myth_assert(new_node != NULL);
 		n_nodes = N_nodes;
 	}
 	task_node_t ret = node_mem;
@@ -111,6 +118,7 @@ time_record_t profiler_malloc_time_record() {
 	if (n_records == 0) {
 		N_records *= 2;
 		record_mem = (time_record_t) myth_malloc(N_records * sizeof(time_record));
+		myth_assert(new_node != NULL);
 		n_records = N_records;
 	}
 	time_record_t ret = record_mem;
@@ -403,7 +411,3 @@ task_node_t profiler_get_sched_node(int i) {
 	return &sched_nodes[i];
 }
 
-void profiler_fini() {
-	myth_internal_lock_destroy(node_mem_lock);
-	myth_internal_lock_destroy(record_mem_lock);
-}

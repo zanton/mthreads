@@ -95,6 +95,11 @@ void myth_detach(myth_thread_t th)
 
 void myth_yield(void)
 {
+	// Ant: [record time] waiting on felock, task stops
+	myth_running_env_t env;
+	env = myth_get_current_env();
+	profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 	myth_yield_body();
 }
 void myth_yield2(void)

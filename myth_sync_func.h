@@ -30,6 +30,9 @@ MYTH_CTX_CALLBACK void myth_barrier_wait_1(void *arg1,void *arg2,void *arg3)
 	myth_assert(next);
 	env->this_thread=next;
 	myth_internal_lock_unlock(plock);
+
+	// Ant: [record time] waiting on barrier, task from run queue begins
+	profiler_add_time_record_wthread(next->node, 0, next);
 }
 
 MYTH_CTX_CALLBACK void myth_barrier_wait_2(void *arg1,void *arg2,void *arg3)
@@ -57,6 +60,9 @@ static inline int myth_barrier_wait_body(myth_barrier_t bar)
 	newval--;
 	b->rest=newval;
 	if (newval!=0){
+		// Ant: [record time] waiting on barrier, task ends
+		profiler_add_time_record_wthread(this_thread->node, 1, this_thread);
+
 		//This thread is not last, will be blocked
 		b->th[newval-1]=this_thread;
 		//Try to get a runnable thread
@@ -130,6 +136,9 @@ MYTH_CTX_CALLBACK void myth_jc_wait_1(void *arg1,void *arg2,void *arg3)
 	myth_assert(next);
 	env->this_thread=next;
 	myth_internal_lock_unlock(plock);
+
+	// Ant: [record time] waiting on jc, task from run queue begins
+	profiler_add_time_record_wthread(next->node, 0, next);
 }
 
 MYTH_CTX_CALLBACK void myth_jc_wait_2(void *arg1,void *arg2,void *arg3)
@@ -159,6 +168,10 @@ static inline void myth_jc_wait_body(myth_jc_t jc)
 		env=myth_get_current_env();
 		myth_thread_t this_thread;
 		this_thread=env->this_thread;
+
+		// Ant: [record time] waiting on jc, task ends
+		profiler_add_time_record_wthread(this_thread->node, 1, this_thread);
+
 		myth_internal_lock_lock(&jc->lock);
 		jc->th=this_thread;
 		//Deque a thread
@@ -404,6 +417,11 @@ static inline int myth_felock_destroy_body(myth_felock_t fe)
 
 static inline int myth_felock_lock_body(myth_felock_t fe)
 {
+	// Ant: [record time] waiting on felock, task stops
+	myth_running_env_t env;
+	env = myth_get_current_env();
+	profiler_add_time_record(env->this_thread->node, 1, env->rank);
+
 	return myth_mutex_lock_body(&fe->lock);
 }
 
@@ -420,12 +438,20 @@ MYTH_CTX_CALLBACK void myth_felock_wait_lock_1(void *arg1,void *arg2,void *arg3)
 		next->env=env;
 	}
 	myth_mutex_unlock_body(&fe->lock);
+
+	// Ant: [record time] waiting on felock, task from run queue begins
+	if (next)
+		profiler_add_time_record_wthread(next->node, 0, next);
 }
 
 static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 {
 	myth_running_env_t e=myth_get_current_env();
 	myth_thread_t this_thread=e->this_thread;
+
+	// Ant: [record time] waiting on felock, task stops
+	profiler_add_time_record_wthread(this_thread->node, 1, this_thread);
+
 	while (1){
 		myth_mutex_lock_body(&fe->lock);
 		volatile myth_running_env_t ev;
@@ -434,6 +460,10 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 		env=ev;
 		assert(this_thread==env->this_thread);
 		if ((!!val)==(!!fe->fe)){
+
+			// Ant: [record time] felock releases, task starts
+			profiler_add_time_record_wthread(this_thread->node, 0, this_thread);
+
 			return 0;
 		}
 		//add to queue
@@ -494,6 +524,8 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 		myth_yield_body();
 #endif
 	}
+	// Ant: [record time] felock releases, task starts
+	profiler_add_time_record_wthread(this_thread->node, 0, this_thread);
 }
 
 static inline int myth_felock_unlock_body(myth_felock_t fe)
@@ -611,12 +643,20 @@ MYTH_CTX_CALLBACK void myth_cond_wait_1(void *arg1,void *arg2,void *arg3)
 		next->env=env;
 	}
 	myth_mutex_unlock_body(mtx);
+
+	// Ant: [record time] waiting on cond, task from run queue begins
+	if (next)
+		profiler_add_time_record_wthread(next->node, 0, next);
 }
 
 static inline int myth_cond_wait_body(myth_cond_t cond,myth_mutex_t mtx)
 {
 	myth_running_env_t env=myth_get_current_env();
 	myth_thread_t this_thread=env->this_thread;
+
+	// Ant: [record time] waiting on cond, task stops
+	profiler_add_time_record_wthread(this_thread->node, 1, this_thread);
+
 	//Re-allocate if waiting list is full
 	if (cond->wsize<=cond->nw){
 		if (cond->wsize==DEFAULT_FESIZE){
