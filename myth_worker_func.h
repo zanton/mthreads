@@ -312,8 +312,8 @@ static inline void myth_startpoint_init_ex_body(int rank)
 	env->sched.context.node = env->sched.node;
 	env->sched.context.thread = NULL;
 
-	// Ant: [record time] task 0 ends (sched begins)
-	profiler_add_time_record_wthread(this_th->node, 1, this_th);
+	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
+	profiler_add_time_stop(this_th->node, env->rank, 18);
 
 	//Initialize context for scheduler
 	env->sched.stack = myth_malloc(SCHED_STACK_SIZE);
@@ -347,8 +347,8 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 	myth_notify_workers_exit();
 	//If running on a different worker, switch context
 	while (env->rank != rank) {
-		// Ant: [record time] task 0 stops to be moved to environment 0
-		profiler_add_time_record(env->this_thread->node, 1, env->rank);
+		// Ant: [record time] [o19] task 0 stops to be moved to environment 0, myth_startpoint_exit_ex_body()
+		profiler_add_time_stop(env->this_thread->node, env->rank, 19);
 
 		intptr_t rank_ = rank;
 		myth_thread_t th;
@@ -478,8 +478,8 @@ static void myth_sched_loop(void)
 #endif
 			myth_assert(next_run->status==MYTH_STATUS_READY);
 
-			// Ant: [record time] sched to task (run queue, I/O check, stealing)
-			profiler_add_time_record_wthread(next_run->node, 0, next_run);
+			// Ant: [record time] [s15] sched to task (run queue, I/O check, stealing), myth_sched_loop()
+			profiler_add_time_start(next_run->node, env->rank, 15);
 
 			myth_swap_context(&env->sched.context, &next_run->context);
 #ifdef MYTH_SCHED_LOOP_DEBUG

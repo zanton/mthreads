@@ -76,7 +76,7 @@ static inline void myth_make_context_voidcall(myth_context_t ctx, void_func_t fu
 
 //#define myth_context_switch_hook(ctx)
 // Antx: define myth_context_switch_hook_swap
-static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to)
+/*static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to)
 {
 	//profiler_add_time_record_wthread(from->node, 1, from->thread);
 	//profiler_add_time_record_wthread(to->node, 0, to->thread);
@@ -85,7 +85,7 @@ static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to
 static void myth_context_switch_hook_set(myth_context_t ctx)
 {
 	//profiler_add_time_record_wthread(ctx->node, 0, ctx->thread);
-}
+}*/
 
 #endif
 
@@ -226,13 +226,13 @@ static void voidcall_context_ep(int pfn0, int pfn1)
 
 // Ant: set context -> hook_set, swap context -> hook_swap
 #define myth_set_context(ctx) \
-  {myth_context_switch_hook_set(ctx); myth_set_context_s(ctx);}
+  {/*myth_context_switch_hook_set(ctx);*/ myth_set_context_s(ctx);}
 #define myth_swap_context(from,to) \
-  {myth_context_switch_hook_swap(from,to); myth_swap_context_s(from,to);}
+  {/*myth_context_switch_hook_swap(from,to);*/ myth_swap_context_s(from,to);}
 #define myth_swap_context_withcall(from,to,fn,a1,a2,a3) \
-  {myth_context_switch_hook_swap(from,to); myth_swap_context_withcall_s(from,to,fn,a1,a2,a3);}
+  {/*myth_context_switch_hook_swap(from,to);*/ myth_swap_context_withcall_s(from,to,fn,a1,a2,a3);}
 #define myth_set_context_withcall(ctx,fn,a1,a2,a3) \
-  {myth_context_switch_hook_set(ctx); myth_set_context_withcall_s(ctx,fn,a1,a2,a3);}
+  {/*myth_context_switch_hook_set(ctx);*/ myth_set_context_withcall_s(ctx,fn,a1,a2,a3);}
 #endif
 
 //Make a context for executing "void foo(void)"

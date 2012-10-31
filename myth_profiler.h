@@ -14,7 +14,7 @@
 //#include "myth_worker.h"
 
 typedef struct time_record {
-	char type; // 0: start, 1: stop
+	int type; // 0: start, 1: stop
 	double val; // time value
 	int worker;
 	struct time_record * next; // pointer to next node
@@ -30,12 +30,14 @@ typedef struct task_node {
 	struct task_node * child;
 } task_node, * task_node_t;
 
-double profiler_get_curtime();
-void profiler_init(int worker_thread_num);
+double 		profiler_get_curtime();
+void 		profiler_init(int worker_thread_num);
 task_node_t profiler_create_new_node(task_node_t parent);
-void profiler_output_data();
-void profiler_add_time_record(task_node_t node, char type, int worker);
-void profiler_add_time_record_wthread(task_node_t node, char type, void * thread);
+void 		profiler_output_data();
+//void profiler_add_time_record(task_node_t node, char type, int worker);
+void 		profiler_add_time_start(task_node_t node, int worker, int start_code);
+void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
+//void profiler_add_time_record_wthread(task_node_t node, char type, void * thread);
 task_node_t profiler_get_root_node();
 task_node_t profiler_get_sched_node(int i);
 
