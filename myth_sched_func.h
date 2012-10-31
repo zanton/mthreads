@@ -422,6 +422,12 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	env=myth_get_current_env();
 	//myth_log_add(env,MYTH_LOG_INT);
 
+	myth_thread_t this_thread;
+	this_thread = env->this_thread;
+
+	// Ant: [record time] [o10] task ends by spawning new task, myth_create_body()
+	profiler_add_time_stop(this_thread->node, env->rank, 10);
+
 #ifdef MYTH_ONE_STACK
 	char l_stack[REAL_STACK_SIZE];
 	new_thread = get_new_myth_thread_struct(REAL_STACK_SIZE,env);
@@ -462,18 +468,13 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #endif /* MYTH_CREATE_PROF */
 
 #ifdef SWITCH_AFTER_CREATE /* default */
-	myth_thread_t this_thread;
-	// Push current thread to runqueue and switch context to new thread
-	this_thread = env->this_thread;
-
-	// Ant: [record time] [o10] task ends by spawning new task, myth_create_body()
-	profiler_add_time_stop(this_thread->node, env->rank, 10);
 
 	// Ant: [prof] [myth_create_body] set task_node for new task
 	new_thread->node = (task_node_t) profiler_create_new_node(this_thread->node);
 	new_thread->context.node = new_thread->node;
 	new_thread->context.thread = new_thread;
 
+	// Push current thread to runqueue and switch context to new thread
 
 #ifdef MYTH_CREATE_PROF_DETAIL
 	env->prof_data.create_d_tmp=myth_get_rdtsc();
