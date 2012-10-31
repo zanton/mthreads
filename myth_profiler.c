@@ -207,19 +207,19 @@ void calculate_running_time_ex(task_node_t node) {
 		return;
 	}
 
-	// Adhoc for task 0, and scheduler 0
-	if (node->index == 0)
-		t = t->next;
-
 	double val = 0;
 	double last = 0;
-	if (t != NULL) {
-		while (t != NULL && t->next != NULL) {
+	while (t != NULL) {
+		while (t != NULL && t->type%2 != 0)
+			t = t->next;
+		if (t != NULL)
 			last = t->val;
+		while (t != NULL && t->type%2 == 0)
 			t = t->next;
+		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
+					t = t->next;
+		if (t != NULL)
 			val += t->val - last;
-			t = t->next;
-		}
 	}
 	node->running_time = val;
 }
@@ -287,7 +287,7 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 		fprintf(fp, "null\"]\n");
 		return;
 	}
-
+	/*
 	int count = 0;
 	if (node->index == 0) {
 		fprintf(fp, "{<b%d> |<s%d>[%c%d][%d]:%0.3lf} | ", count, count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
@@ -304,7 +304,39 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 	}
 	if (t != NULL) { //node->index == 0) {
 		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d> }", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base, count);
+	}*/
+
+	int count = 0;
+	while (t != NULL) {
+		if (t->type%2 == 1)
+			fprintf(fp, "{<b%d> |", count);
+		else {
+			fprintf(fp, "{<b%d>", count);
+			while (t != NULL && t->type%2 == 0) {
+				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
+				t = t->next;
+				fprintf(fp, "|");
+			}
+		}
+		if (t == NULL)
+			fprintf(fp, "<s%d> }", count);
+		else {
+			while (t != NULL && t->type%2 == 1) {
+				if (t->next == NULL || t->next->type%2 == 0)
+					fprintf(fp, "<s%d>", count);
+				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
+				t = t->next;
+				if (t != NULL && t->type%2 == 1)
+					fprintf(fp, "|");
+				else
+					fprintf(fp, "}");
+			}
+			if (t != NULL)
+				fprintf(fp, " | ");
+		}
+		count++;
 	}
+
 	fprintf(fp, "\"]\n");
 }
 
