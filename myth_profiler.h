@@ -10,8 +10,7 @@
 
 #include <stdio.h>
 #include <sys/time.h>
-//#include "myth_misc.h"
-//#include "myth_worker.h"
+#include <papi.h>
 
 typedef struct time_record {
 	int type; // 0: start, 1: stop

@@ -29,11 +29,40 @@ myth_internal_lock_t * node_mem_lock, * record_mem_lock;
 double tempdata[2];
 int n_tempdata;
 
+// PAPI
+int retval;
+long long start_usec, end_usec;
+
 double profiler_get_curtime()
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1.0E+3 + tv.tv_usec * 1.0E-3;
+}
+
+void PAPI_fail(char *file, int line, char *call, int retval)
+{
+
+    printf("%s\tFAILED\nLine # %d\n", file, line);
+    if ( retval == PAPI_ESYS ) {
+        char buf[128];
+        memset( buf, '\0', sizeof(buf) );
+        sprintf(buf, "System error in %s:", call );
+        perror(buf);
+    }
+    else if ( retval > 0 ) {
+        printf("Error calculating: %s\n", call );
+    }
+    else {
+    	// PAPI 4.4.0
+        //char errstring[PAPI_MAX_STR_LEN];
+        //PAPI_perror(retval, errstring, PAPI_MAX_STR_LEN );
+        //printf("Error in %s: %s\n", call, errstring );
+    	// PAPI 5.0.1
+    	PAPI_perror(PAPI_strerror(retval));
+    }
+    printf("\n");
+    exit(1);
 }
 
 void create_root_node() {
@@ -92,6 +121,12 @@ void profiler_init(int worker_thread_num) {
 
 	// Temp
 	n_tempdata = 0;
+
+	// PAPI
+	retval = PAPI_library_init(PAPI_VER_CURRENT);
+	if (retval != PAPI_VER_CURRENT)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+	start_usec = PAPI_get_real_usec();
 }
 
 void profiler_fini() {
@@ -379,7 +414,7 @@ void profiler_output_data() {
 	printf("Profiler's output begins...\n");
 
 	// Make prof folder
-	mkdir("./prof", S_IRWXU | S_IRWXG | S_IROTH);
+	mkdir("./tsprof", S_IRWXU | S_IRWXG | S_IROTH);
 
 	// Indexing tasks
 	root_node->index = 0;
@@ -398,7 +433,7 @@ void profiler_output_data() {
 	FILE *fp;
 
 	// Task tree
-	fp = fopen("./prof/task_tree.dot", "w");
+	fp = fopen("./tsprof/task_tree.dot", "w");
 	fprintf(fp, "digraph g{\n");
 	output_task_tree(fp, root_node);
 	output_running_time(fp, root_node);
@@ -407,13 +442,13 @@ void profiler_output_data() {
 	//printf("finished writing task_tree.dot\n");
 
 	// Time records
-	fp = fopen("./prof/time_records.txt", "w");
+	fp = fopen("./tsprof/time_records.txt", "w");
 	output_time_records(fp);
 	fclose(fp);
 	//printf("finished writing time_records.txt\n");
 
 	// Task tree with time records
-	fp = fopen("./prof/task_tree_w_time_records.dot", "w");
+	fp = fopen("./tsprof/task_tree_w_time_records.dot", "w");
 	fprintf(fp, "// task tree with time records\n");
 	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
 	output_task_tree_wtime(fp);
@@ -424,6 +459,13 @@ void profiler_output_data() {
 
 	fprintf(fp, "\n}");
 	fclose(fp);
+
+	// Print temp data (real temp)
+	fp = fopen("./tsprof/tempdata.txt", "w");
+	end_usec = PAPI_get_real_usec();
+	fprintf(fp, "Time from profiler_init() to end of output_data():\n%ld\n", end_usec - start_usec);
+	fclose(fp);
+
 	//printf("finished writing task_tree_w_time_records.dot\n");
 	printf("Profiler's output ended.\n");
 	profiler_fini();
