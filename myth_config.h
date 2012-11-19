@@ -225,4 +225,7 @@
 #undef MYTH_INLINE_CONTEXT
 #endif
 
+// Task stretch profiler
+#define PROFILER_ON
+
 #endif /* MYTH_CONFIG_H_ */

@@ -56,15 +56,16 @@ int myth_init_ex_body(int worker_num)
 void myth_init_body(void)
 {
 	myth_init_ex_body(0);
+
+	// Ant: [prof] Initialize profiler, must be before creating threads
+	profiler_init(g_worker_thread_num);
+
 	//Create worker threads
 	intptr_t i;
 	for (i=1;i<g_worker_thread_num;i++){
 		real_pthread_create(&g_envs[i].worker,NULL,myth_worker_thread_fn,(void*)i);
 	}
 	g_envs[0].worker=real_pthread_self();
-
-	// Ant: [prof] Initialize profiler
-	profiler_init(g_worker_thread_num);
 
 	//Initialize each worker threads
 	myth_worker_thread_fn((void*)(intptr_t)0);

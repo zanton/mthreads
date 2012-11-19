@@ -17,6 +17,9 @@ typedef struct time_record {
 	double val; // time value
 	int worker;
 	struct time_record * next; // pointer to next node
+
+	long long l1_tcm, l2_tcm; // PAPI_L1_TCM, PAPI_L2_TCM
+
 } time_record, * time_record_t;
 
 // Ant: [struct task_node] structure to save tasks' infomation
@@ -31,6 +34,8 @@ typedef struct task_node {
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);
+void		profiler_init_thread(int rank);
+void		profiler_fini_thread(int rank);
 task_node_t profiler_create_new_node(task_node_t parent);
 void 		profiler_output_data();
 //void profiler_add_time_record(task_node_t node, char type, int worker);

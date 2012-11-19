@@ -12,6 +12,16 @@
 #include "myth_desc.h"
 #include "myth_internal_lock.h"
 
+#define DIR_FOR_PROF_DATA "./tsprof"
+#define FILE_FOR_TASK_TREE "./tsprof/task_tree.dot"
+#define FILE_FOR_TIME_RECORDS "./tsprof/time_records.txt"
+#define FILE_FOR_TASK_TREE_W_TIME_RECORDS "./tsprof/task_tree_w_time_records.dot"
+#define FILE_FOR_OTHER_DATA "./tsprof/other_data.txt"
+#define FILE_FOR_TASK_TREE_W_L1TCM "./tsprof/task_tree_w_l1tcm.dot"
+#define FILE_FOR_TASK_TREE_W_L2TCM "./tsprof/task_tree_w_l2tcm.dot"
+
+#define NUMBER_OF_EVENTS 2
+
 task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
 int sched_num = 0;
@@ -25,13 +35,11 @@ int n_nodes, n_records;
 int N_nodes, N_records;
 myth_internal_lock_t * node_mem_lock, * record_mem_lock;
 
-// Temp
-double tempdata[2];
-int n_tempdata;
-
 // PAPI
 int retval;
 long long start_usec, end_usec;
+int * EventSet;
+long long ** values; // count PAPI_L1_TCM, PAPI_L2_TCM
 
 double profiler_get_curtime()
 {
@@ -42,16 +50,15 @@ double profiler_get_curtime()
 
 void PAPI_fail(char *file, int line, char *call, int retval)
 {
-
-    printf("%s\tFAILED\nLine # %d\n", file, line);
+    fprintf(stderr, "%s\tFAILED\nLine # %d\n", file, line);
     if ( retval == PAPI_ESYS ) {
         char buf[128];
         memset( buf, '\0', sizeof(buf) );
-        sprintf(buf, "System error in %s:", call );
+        sprintf(buf, "System error in %s:", call);
         perror(buf);
     }
     else if ( retval > 0 ) {
-        printf("Error calculating: %s\n", call );
+        fprintf(stderr, "Error calculating: %s\n", call );
     }
     else {
     	// PAPI 4.4.0
@@ -59,9 +66,10 @@ void PAPI_fail(char *file, int line, char *call, int retval)
         //PAPI_perror(retval, errstring, PAPI_MAX_STR_LEN );
         //printf("Error in %s: %s\n", call, errstring );
     	// PAPI 5.0.1
+    	fprintf(stderr, "Error in %s\n", call);
     	PAPI_perror(PAPI_strerror(retval));
     }
-    printf("\n");
+    fprintf(stderr, "\n");
     exit(1);
 }
 
@@ -119,14 +127,50 @@ void profiler_init(int worker_thread_num) {
 	create_sched_nodes(worker_thread_num);
 	init_memory_allocator();
 
-	// Temp
-	n_tempdata = 0;
-
 	// PAPI
+	// Initialize PAPI library
 	retval = PAPI_library_init(PAPI_VER_CURRENT);
 	if (retval != PAPI_VER_CURRENT)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+	// Initialize PAPI's thread function
+	retval = PAPI_thread_init( (unsigned long (*) (void)) real_pthread_self);
+	if (retval != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_thread_init", retval);
+	// Initialize variables related to PAPI
+	EventSet = (int *) myth_malloc(worker_thread_num * sizeof(int));
+	values = (long long **) myth_malloc(worker_thread_num * sizeof(long long *));
+
 	start_usec = PAPI_get_real_usec();
+}
+
+void profiler_init_thread(int rank) {
+	// Ant: [prof] register this worker thread
+	if (rank != 0) {
+		retval = PAPI_register_thread();
+		if (retval != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_register_thread", retval);
+	}
+	// Initialize EventSet
+	if ((retval = PAPI_create_eventset(EventSet + rank)) != PAPI_OK)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_create_eventset", retval);
+	if ((retval = PAPI_add_event(EventSet[rank], PAPI_L1_TCM)) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
+	if ((retval = PAPI_add_event(EventSet[rank], PAPI_L2_TCM)) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
+	if ((retval = PAPI_start(EventSet[rank])) != PAPI_OK)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_start", retval);
+	// Initialize values variable
+	values[rank] = (long long *) myth_malloc(NUMBER_OF_EVENTS * sizeof(long long));
+}
+
+void profiler_fini_thread(int rank) {
+	if ((retval = PAPI_stop(EventSet[rank], values[rank])) != PAPI_OK)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_stop", retval);
+	if (rank != 0) {
+		retval = PAPI_unregister_thread();
+		if (retval != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_unregister_thread", retval);
+	}
 }
 
 void profiler_fini() {
@@ -410,11 +454,89 @@ void output_task_tree_wtime(FILE * fp) {
 	output_task_tree_wtime_arcs(fp, root_node);
 }
 
+void output_task_tree_wtcm_ex(FILE * fp, task_node_t node, int output_code) {
+	fprintf(fp, "%d [label=\"%d | ", node->index, node->index);
+	time_record_t t = node->time_record;
+
+	if (t == NULL) {
+		fprintf(fp, "null\"]\n");
+		return;
+	}
+
+	int count = 0;
+	while (t != NULL) {
+		if (t->type%2 == 1)
+			fprintf(fp, "{<b%d> |", count);
+		else {
+			fprintf(fp, "{<b%d>", count);
+			while (t != NULL && t->type%2 == 0) {
+				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->l1_tcm:t->l2_tcm);
+				t = t->next;
+				fprintf(fp, "|");
+			}
+		}
+		if (t == NULL)
+			fprintf(fp, "<s%d> }", count);
+		else {
+			while (t != NULL && t->type%2 == 1) {
+				if (t->next == NULL || t->next->type%2 == 0)
+					fprintf(fp, "<s%d>", count);
+				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->l1_tcm:t->l2_tcm);
+				t = t->next;
+				if (t != NULL && t->type%2 == 1)
+					fprintf(fp, "|");
+				else
+					fprintf(fp, "}");
+			}
+			if (t != NULL)
+				fprintf(fp, " | ");
+		}
+		count++;
+	}
+
+	fprintf(fp, "\"]\n");
+}
+
+void output_task_tree_wtcm_1(FILE * fp, task_node_t node, int output_code) {
+	output_task_tree_wtcm_ex(fp, node, output_code);
+	if (node->child != NULL)
+		output_task_tree_wtcm_1(fp, node->child, output_code);
+	if (node->mate != NULL)
+		output_task_tree_wtcm_1(fp, node->mate, output_code);
+}
+
+void output_task_tree_wtcm_arcs(FILE * fp, task_node_t node) {
+	if (node->child == NULL)
+		return;
+	// Output all level-1 children
+	task_node_t child = node->child;
+	int count = 0;
+	if (node->index == 0)
+		count = 1;
+	while (child != NULL) {
+		fprintf(fp, "%d:s%d -> %d:b0\n", node->index, count, child->index);
+		count++;
+		child = child->mate;
+	}
+	// Output all subtrees
+	child = node->child;
+	while (child != NULL) {
+		output_task_tree_wtime_arcs(fp, child);
+		child = child->mate;
+	}
+}
+
+void output_task_tree_wtcm(FILE * fp, int output_code) {
+	output_task_tree_wtcm_1(fp, root_node, output_code);
+	//printf("finished outputing task tree wtime 1\n");
+	output_task_tree_wtcm_arcs(fp, root_node);
+}
+
 void profiler_output_data() {
 	printf("Profiler's output begins...\n");
 
 	// Make prof folder
-	mkdir("./tsprof", S_IRWXU | S_IRWXG | S_IROTH);
+	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
 
 	// Indexing tasks
 	root_node->index = 0;
@@ -433,7 +555,7 @@ void profiler_output_data() {
 	FILE *fp;
 
 	// Task tree
-	fp = fopen("./tsprof/task_tree.dot", "w");
+	fp = fopen(FILE_FOR_TASK_TREE, "w");
 	fprintf(fp, "digraph g{\n");
 	output_task_tree(fp, root_node);
 	output_running_time(fp, root_node);
@@ -442,28 +564,39 @@ void profiler_output_data() {
 	//printf("finished writing task_tree.dot\n");
 
 	// Time records
-	fp = fopen("./tsprof/time_records.txt", "w");
+	fp = fopen(FILE_FOR_TIME_RECORDS, "w");
 	output_time_records(fp);
 	fclose(fp);
 	//printf("finished writing time_records.txt\n");
 
 	// Task tree with time records
-	fp = fopen("./tsprof/task_tree_w_time_records.dot", "w");
+	fp = fopen(FILE_FOR_TASK_TREE_W_TIME_RECORDS, "w");
 	fprintf(fp, "// task tree with time records\n");
 	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
 	output_task_tree_wtime(fp);
-
-	// Print temp data
-	for (i=0; i<n_tempdata; i++)
-		fprintf(fp, "%0.3lf\n", tempdata[i] - base);
-
 	fprintf(fp, "\n}");
 	fclose(fp);
 
-	// Print temp data (real temp)
-	fp = fopen("./tsprof/tempdata.txt", "w");
+	// Print temp data for testing
+	fp = fopen(FILE_FOR_OTHER_DATA, "w");
 	end_usec = PAPI_get_real_usec();
-	fprintf(fp, "Time from profiler_init() to end of output_data():\n%ld\n", end_usec - start_usec);
+	fprintf(fp, "Time from profiler_init() to end of output_data():\n%lld\n", end_usec - start_usec);
+	fclose(fp);
+
+	// Task tree with PAPI_L1_TCM
+	fp = fopen(FILE_FOR_TASK_TREE_W_L1TCM, "w");
+	fprintf(fp, "// task tree with data from PAPI_L1_TCM\n");
+	fprintf(fp, "digraph g{\nnode[shape=\"record\"]\n");
+	output_task_tree_wtcm(fp, 0);
+	fprintf(fp, "\n}");
+	fclose(fp);
+
+	// Task tree with PAPI_L2_TCM
+	fp = fopen(FILE_FOR_TASK_TREE_W_L2TCM, "w");
+	fprintf(fp, "// task tree with data from PAPI_L2_TCM\n");
+	fprintf(fp, "digraph g{\nnode[shape=\"record\"]\n");
+	output_task_tree_wtcm(fp, 1);
+	fprintf(fp, "\n}");
 	fclose(fp);
 
 	//printf("finished writing task_tree_w_time_records.dot\n");
@@ -483,6 +616,7 @@ time_record_t create_time_record(int type, int worker, double val) {
 }
 
 void profiler_add_time_start(task_node_t node, int worker, int start_code) {
+	// Create time record
 	time_record_t record = create_time_record(start_code << 1, worker, 0);
 	if (node->time_record == NULL)
 		node->time_record = record;
@@ -492,11 +626,21 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 			temp = temp->next;
 		temp->next = record;
 	}
+	// PAPI counts
+	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+	record->l1_tcm = values[worker][0];
+	record->l2_tcm = values[worker][1];
+
+	// Must be at the end
 	record->val = profiler_get_curtime();
 }
 
 void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
+	// Must be at the begining
 	double time = profiler_get_curtime();
+
+	// Create time record
 	time_record_t record = create_time_record((stop_code << 1) + 1, worker, time);
 	if (node->time_record == NULL)
 		node->time_record = record;
@@ -506,6 +650,11 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 			temp = temp->next;
 		temp->next = record;
 	}
+	// PAPI counts
+	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+	record->l1_tcm = values[worker][0];
+	record->l2_tcm = values[worker][1];
 }
 
 /*

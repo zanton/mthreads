@@ -253,6 +253,9 @@ static inline void myth_cleanup_worker(int rank)
 	myth_malloc_wrapper_fini_worker(rank);
 	//finalize logger
 	myth_log_worker_fini(env);
+
+	// Ant: [prof] cleanup profiling of worker threads
+	profiler_fini_thread(rank);
 }
 
 //Execute worker thread scheduling loop
@@ -373,6 +376,10 @@ static inline void *myth_worker_thread_fn(void *args)
 	cs=myth_get_worker_cpuset(rank);
 	real_pthread_setaffinity_np(real_pthread_self(),sizeof(cpu_set_t),&cs);
 #endif
+
+	// Ant: [prof] initialize profiler for each thread
+	profiler_init_thread(rank);
+
 	if (rank == 0) {
 		//setup as a main thread
 		myth_startpoint_init_ex_body(rank);
