@@ -20,6 +20,12 @@
 #define FILE_FOR_TASK_TREE_W_L1TCM "./tsprof/task_tree_w_l1tcm.dot"
 #define FILE_FOR_TASK_TREE_W_L2TCM "./tsprof/task_tree_w_l2tcm.dot"
 
+#define GRAPH_TITLE_PRINT_PATTERN "label=\"%s\"\nlabelloc=top\nlabeljust=left\n"
+#define GRAPH_TITLE_TASK_TREE "Task tree graph"
+#define GRAPH_TITLE_TASK_TREE_TIME_RECORDS "Task tree graph with time records"
+#define GRAPH_TITLE_TASK_TREE_L1TCM "Task tree graph with level 1 total cache misses"
+#define GRAPH_TITLE_TASK_TREE_L2TCM "Task tree graph with level 2 total cache misses"
+
 #define NUMBER_OF_EVENTS 2
 
 task_node_t root_node = NULL;
@@ -138,6 +144,9 @@ void profiler_init(int worker_thread_num) {
 			PAPI_fail(__FILE__, __LINE__, "PAPI_thread_init", retval);
 	// Initialize variables related to PAPI
 	EventSet = (int *) myth_malloc(worker_thread_num * sizeof(int));
+	int i;
+	for (i=0; i<worker_thread_num; i++)
+		EventSet[i] = PAPI_NULL;
 	values = (long long **) myth_malloc(worker_thread_num * sizeof(long long *));
 
 	start_usec = PAPI_get_real_usec();
@@ -557,6 +566,7 @@ void profiler_output_data() {
 	// Task tree
 	fp = fopen(FILE_FOR_TASK_TREE, "w");
 	fprintf(fp, "digraph g{\n");
+	fprintf(fp, GRAPH_TITLE_PRINT_PATTERN, GRAPH_TITLE_TASK_TREE);
 	output_task_tree(fp, root_node);
 	output_running_time(fp, root_node);
 	fprintf(fp, "\n}");
@@ -573,6 +583,7 @@ void profiler_output_data() {
 	fp = fopen(FILE_FOR_TASK_TREE_W_TIME_RECORDS, "w");
 	fprintf(fp, "// task tree with time records\n");
 	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
+	fprintf(fp, GRAPH_TITLE_PRINT_PATTERN, GRAPH_TITLE_TASK_TREE_TIME_RECORDS);
 	output_task_tree_wtime(fp);
 	fprintf(fp, "\n}");
 	fclose(fp);
@@ -587,6 +598,7 @@ void profiler_output_data() {
 	fp = fopen(FILE_FOR_TASK_TREE_W_L1TCM, "w");
 	fprintf(fp, "// task tree with data from PAPI_L1_TCM\n");
 	fprintf(fp, "digraph g{\nnode[shape=\"record\"]\n");
+	fprintf(fp, GRAPH_TITLE_PRINT_PATTERN, GRAPH_TITLE_TASK_TREE_L1TCM);
 	output_task_tree_wtcm(fp, 0);
 	fprintf(fp, "\n}");
 	fclose(fp);
@@ -595,6 +607,7 @@ void profiler_output_data() {
 	fp = fopen(FILE_FOR_TASK_TREE_W_L2TCM, "w");
 	fprintf(fp, "// task tree with data from PAPI_L2_TCM\n");
 	fprintf(fp, "digraph g{\nnode[shape=\"record\"]\n");
+	fprintf(fp, GRAPH_TITLE_PRINT_PATTERN, GRAPH_TITLE_TASK_TREE_L2TCM);
 	output_task_tree_wtcm(fp, 1);
 	fprintf(fp, "\n}");
 	fclose(fp);
