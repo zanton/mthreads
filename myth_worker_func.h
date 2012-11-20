@@ -254,8 +254,10 @@ static inline void myth_cleanup_worker(int rank)
 	//finalize logger
 	myth_log_worker_fini(env);
 
+#ifdef PROFILER_ON
 	// Ant: [prof] cleanup profiling of worker threads
 	profiler_fini_thread(rank);
+#endif /*PROFILER_ON*/
 }
 
 //Execute worker thread scheduling loop
@@ -265,10 +267,10 @@ static inline void myth_worker_start_ex_body(int rank)
 	myth_running_env_t env;
 	env=myth_get_current_env();
 
+#ifdef PROFILER_ON
 	// Ant: [prof] [myth_worker_start_ex_body] set task_node for sched 1..n
 	env->sched.node = profiler_get_sched_node(rank);
-	env->sched.context.node = env->sched.node;
-	env->sched.context.thread = NULL;
+#endif /*PROFILER_ON*/
 
 	env->sched.stack=NULL;
 	//Call thread scheduler
@@ -305,18 +307,16 @@ static inline void myth_startpoint_init_ex_body(int rank)
 	//Set worker thread descriptor
 	this_th->env = env;
 
+#ifdef PROFILER_ON
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for root task
 	this_th->node = profiler_get_root_node();
-	this_th->context.node = this_th->node;
-	this_th->context.thread = this_th;
 
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for sched 0
 	env->sched.node = profiler_get_sched_node(rank);
-	env->sched.context.node = env->sched.node;
-	env->sched.context.thread = NULL;
 
 	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
 	profiler_add_time_stop(this_th->node, env->rank, 18);
+#endif /*PROFILER_ON*/
 
 	//Initialize context for scheduler
 	env->sched.stack = myth_malloc(SCHED_STACK_SIZE);
@@ -350,8 +350,10 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 	myth_notify_workers_exit();
 	//If running on a different worker, switch context
 	while (env->rank != rank) {
+#ifdef PROFILER_ON
 		// Ant: [record time] [o19] task 0 stops to be moved to environment 0, myth_startpoint_exit_ex_body()
 		profiler_add_time_stop(env->this_thread->node, env->rank, 19);
+#endif /*PROFILER_ON*/
 
 		intptr_t rank_ = rank;
 		myth_thread_t th;
@@ -377,8 +379,10 @@ static inline void *myth_worker_thread_fn(void *args)
 	real_pthread_setaffinity_np(real_pthread_self(),sizeof(cpu_set_t),&cs);
 #endif
 
+#ifdef PROFILER_ON
 	// Ant: [prof] initialize profiler for each thread
 	profiler_init_thread(rank);
+#endif /*PROFILER_ON*/
 
 	if (rank == 0) {
 		//setup as a main thread
@@ -442,9 +446,6 @@ static void myth_sched_loop(void)
 	t1=0;
 	env=myth_get_current_env();
 
-	// Antx: [prof] [myth_sched_loop] record time for schedulers
-	//profiler_add_time_record(env->sched.node, 0, -1);
-
 #ifdef MYTH_SCHED_LOOP_DEBUG
 	myth_dprintf("myth_sched_loop:entered main loop\n");
 #endif
@@ -485,8 +486,10 @@ static void myth_sched_loop(void)
 #endif
 			myth_assert(next_run->status==MYTH_STATUS_READY);
 
+#ifdef PROFILER_ON
 			// Ant: [record time] [s15] sched to task (run queue, I/O check, stealing), myth_sched_loop()
 			profiler_add_time_start(next_run->node, env->rank, 15);
+#endif /*PROFILER_ON*/
 
 			myth_swap_context(&env->sched.context, &next_run->context);
 #ifdef MYTH_SCHED_LOOP_DEBUG

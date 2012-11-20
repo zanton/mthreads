@@ -57,8 +57,10 @@ void myth_init_body(void)
 {
 	myth_init_ex_body(0);
 
+#ifdef PROFILER_ON
 	// Ant: [prof] Initialize profiler, must be before creating threads
 	profiler_init(g_worker_thread_num);
+#endif /*PROFILER_ON*/
 
 	//Create worker threads
 	intptr_t i;
@@ -314,8 +316,10 @@ void myth_emit_log(FILE *fp_prof_out)
 
 void myth_fini_ex_body(void)
 {
+#ifdef PROFILER_ON
 	// Ant: [prof] [myth_fini_ex_body] output prof data
 	profiler_output_data();
+#endif /*PROFILER_ON*/
 
 	//Output Log
 	myth_emit_log(stderr);

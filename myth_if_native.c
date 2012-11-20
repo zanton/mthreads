@@ -95,10 +95,12 @@ void myth_detach(myth_thread_t th)
 
 void myth_yield(void)
 {
+#ifdef PROFILER_ON
 	// Ant: [record time] [o1] task stops by myth_yield()
 	myth_running_env_t env;
 	env = myth_get_current_env();
 	profiler_add_time_stop(env->this_thread->node, env->rank, 1);
+#endif /*PROFILER_ON*/
 
 	myth_yield_body();
 }

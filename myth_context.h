@@ -52,11 +52,6 @@ typedef struct myth_context
 #else
 #error "Architecture not defined"
 #endif
-
-  // Ant: [prof] [struct myth_context] pointer to myth_thread and task_node
-  struct myth_thread * thread;
-  struct task_node * node;
-
 } myth_context, *myth_context_t;
 
 static inline void myth_make_context_empty(myth_context_t ctx, void *stack,
