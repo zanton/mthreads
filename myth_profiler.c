@@ -12,6 +12,7 @@
 #include "myth_desc.h"
 #include "myth_internal_lock.h"
 #include "myth_profiler_output.h"
+#include "myth_init.h"
 
 #define DIR_FOR_PROF_DATA "./tsprof"
 #define FILE_FOR_TASK_TREE "./tsprof/task_tree.dot"
@@ -20,6 +21,7 @@
 #define FILE_FOR_OTHER_DATA "./tsprof/other_data.txt"
 #define FILE_FOR_TASK_TREE_W_L1TCM "./tsprof/task_tree_w_l1tcm.dot"
 #define FILE_FOR_TASK_TREE_W_L2TCM "./tsprof/task_tree_w_l2tcm.dot"
+#define FILE_FOR_TASK_TREE_SUMMARY "./tsprof/task_tree_summary.dot"
 
 #define GRAPH_TITLE_PRINT_PATTERN "label=\"%s\"\nlabelloc=top\nlabeljust=left\n"
 #define GRAPH_TITLE_TASK_TREE "Task tree graph"
@@ -27,11 +29,12 @@
 #define GRAPH_TITLE_TASK_TREE_L1TCM "Task tree graph with level 1 total cache misses"
 #define GRAPH_TITLE_TASK_TREE_L2TCM "Task tree graph with level 2 total cache misses"
 
-#define NUMBER_OF_EVENTS 2
+#define NUMBER_OF_PAPI_EVENTS 2
 
 task_node_t root_node = NULL;
 task_node_t sched_nodes = NULL;
 int sched_num = 0;
+char task_depth_limit = -1;  // Profiling task depth limit, less than 0 means unlimited
 
 double base = 0;  // base value for time
 
@@ -138,6 +141,12 @@ void profiler_init(int worker_thread_num) {
 	create_sched_nodes(worker_thread_num);
 	init_memory_allocator();
 
+	// Get enviroment variable
+	//char * env_var;
+	//env_var = getenv(ENV_TASK_DEPTH_LIMIT);
+	//if (env_var) task_depth_limit = atoi(env_var);
+	task_depth_limit = 3;
+
 	// PAPI
 	// Initialize PAPI library
 	retval = PAPI_library_init(PAPI_VER_CURRENT);
@@ -174,7 +183,7 @@ void profiler_init_thread(int rank) {
 	if ((retval = PAPI_start(EventSet[rank])) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_start", retval);
 	// Initialize values variable
-	values[rank] = (long long *) myth_malloc(NUMBER_OF_EVENTS * sizeof(long long));
+	values[rank] = (long long *) myth_malloc(NUMBER_OF_PAPI_EVENTS * sizeof(long long));
 }
 
 void profiler_fini_thread(int rank) {
@@ -222,38 +231,70 @@ time_record_t profiler_malloc_time_record() {
 }
 
 task_node_t profiler_create_new_node(task_node_t parent) {
-	//if (parent->level == 1)
-			//tempdata[n_tempdata++] = profiler_get_curtime();
-
 	task_node_t new_node;
 	// Allocate memory
 	//new_node = (task_node_t) myth_flmalloc(env->rank, sizeof(task_node));
 	//new_node = (task_node_t) myth_malloc(sizeof(task_node));
 	new_node = profiler_malloc_task_node();
-	// Set up fields
-	new_node->level = parent->level + 1;
-	new_node->index = 0;  // need edited later
-	new_node->counters.time = 0.0;  		// need edited later
-	new_node->counters.l1_tcm = 0;  	// need edited later
-	new_node->counters.l2_tcm = 0;  	// need edited later
-	new_node->time_record = NULL;
-	new_node->mate = NULL;
-	new_node->child = NULL;
 
-	// Bind new_node to task tree
-	if (parent->child == NULL) {
-		parent->child = new_node;
+	// Check if the parent task's level is in or out of limit
+	if ((task_depth_limit < 0) || (parent->level >= 0 && parent->level < task_depth_limit)) {
+		// Set up fields
+		new_node->level = parent->level + 1;
+		new_node->index = 0;  // need edited later
+		new_node->counters.time = 0.0;  		// need edited later
+		new_node->counters.l1_tcm = 0;  	// need edited later
+		new_node->counters.l2_tcm = 0;  	// need edited later
+		new_node->time_record = NULL;
+		new_node->mate = NULL;
+		new_node->child = NULL;
+
+		// Bind new_node to task tree
+		if (parent->child == NULL) {
+			parent->child = new_node;
+		} else {
+			task_node_t temp = parent->child;
+			while (temp->mate != NULL)
+				temp = temp->mate;
+			temp->mate = new_node;
+		}
 	} else {
-		task_node_t temp = parent->child;
-		while (temp->mate != NULL)
-			temp = temp->mate;
-		temp->mate = new_node;
+
+		// Create a child node to accumulate child results
+		if (parent->level == task_depth_limit && parent->child == NULL) {
+			parent->child = profiler_malloc_task_node();
+			parent->child->level = parent->level + 1;
+			parent->child->index = 0;  // unused
+			parent->child->counters.time = 0.0;		// accumulate
+			parent->child->counters.l1_tcm = 0;  	// accumulate
+			parent->child->counters.l2_tcm = 0;  	// accumulate
+			parent->child->time_record = NULL;	// unused
+			parent->child->mate = NULL;				// unused
+			parent->child->child = NULL; 			// unused
+		}
+		// Check if current parent is true parent
+		if (parent->level < 0)
+			parent = parent->child;
+		// Set up fields
+		new_node->level = -1;
+		new_node->index = -1;  // used to indicate time record type, 0:start, 1:stop, -1:nothing
+		new_node->counters.time = 0.0;		// need edited later
+		new_node->counters.l1_tcm = 0;  	// need edited later
+		new_node->counters.l2_tcm = 0;  	// need edited later
+		new_node->time_record = NULL;	// unused
+		new_node->mate = NULL;				// unused
+		new_node->child = parent; // pointer to its parent node for accumulating child results
+
 	}
 
 	return new_node;
 }
 
 int indexing_tasks(task_node_t node, int index) {
+	if (task_depth_limit >=0 && node->level > task_depth_limit) {
+		node->index = -(index-1);
+		return index;
+	}
 	node->index = index;
 	int i = index + 1;
 	if (node->child != NULL)
@@ -287,12 +328,85 @@ void calculate_running_time_ex(task_node_t node) {
 	node->counters.time = val;
 }
 
-void calculate_running_time_1(task_node_t node) {
+void calculate_running_time(task_node_t node) {
+	if (task_depth_limit >= 0 && node->level > task_depth_limit)
+		return;
+
 	calculate_running_time_ex(node);
 	if (node->child != NULL)
-		calculate_running_time_1(node->child);
+		calculate_running_time(node->child);
 	if (node->mate != NULL)
-		calculate_running_time_1(node->mate);
+		calculate_running_time(node->mate);
+}
+//TODO: gop 3 ham calculate_* lai lam 1
+void calculate_l1_tcm_ex(task_node_t node) {
+	time_record_t t = node->time_record;
+	if (t == NULL) {
+		node->counters.l1_tcm = 0;
+		return;
+	}
+
+	long long val = 0;
+	long long last = 0;
+	while (t != NULL) {
+		while (t != NULL && t->type%2 != 0)
+			t = t->next;
+		if (t != NULL)
+			last = t->counters.l1_tcm;
+		while (t != NULL && t->type%2 == 0)
+			t = t->next;
+		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
+					t = t->next;
+		if (t != NULL)
+			val += t->counters.l1_tcm - last;
+	}
+	node->counters.l1_tcm = val;
+}
+
+void calculate_l1_tcm(task_node_t node) {
+	if (task_depth_limit >= 0 && node->level > task_depth_limit)
+		return;
+
+	calculate_l1_tcm_ex(node);
+	if (node->child != NULL)
+		calculate_l1_tcm(node->child);
+	if (node->mate != NULL)
+		calculate_l1_tcm(node->mate);
+}
+
+void calculate_l2_tcm_ex(task_node_t node) {
+	time_record_t t = node->time_record;
+	if (t == NULL) {
+		node->counters.l2_tcm = 0;
+		return;
+	}
+
+	long long val = 0;
+	long long last = 0;
+	while (t != NULL) {
+		while (t != NULL && t->type%2 != 0)
+			t = t->next;
+		if (t != NULL)
+			last = t->counters.l2_tcm;
+		while (t != NULL && t->type%2 == 0)
+			t = t->next;
+		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
+					t = t->next;
+		if (t != NULL)
+			val += t->counters.l2_tcm - last;
+	}
+	node->counters.l2_tcm = val;
+}
+
+void calculate_l2_tcm(task_node_t node) {
+	if (task_depth_limit >= 0 && node->level > task_depth_limit)
+		return;
+
+	calculate_l2_tcm_ex(node);
+	if (node->child != NULL)
+		calculate_l2_tcm(node->child);
+	if (node->mate != NULL)
+		calculate_l2_tcm(node->mate);
 }
 
 void profiler_output_data() {
@@ -303,16 +417,18 @@ void profiler_output_data() {
 
 	// Indexing tasks
 	root_node->index = 0;
-	indexing_tasks(root_node->child, 1);
-	//printf("finished indexing tasks\n");
+	if (root_node->child != NULL)
+		indexing_tasks(root_node->child, 1);
 
 	// Calculate running time
 	int i;
 	for (i=0; i<sched_num; i++)
-		calculate_running_time_ex(&sched_nodes[i]);
-	//printf("finished calculating scheds' running times\n");
-	calculate_running_time_1(root_node);
-	//printf("finished calculating running times\n");
+		calculate_running_time_ex(&sched_nodes[i]); //TODO: del data structure for scheds!?
+	calculate_running_time(root_node);
+
+	// Calculate l1_tcm, l2_tcm
+	calculate_l1_tcm(root_node);
+	calculate_l2_tcm(root_node);
 
 	// Output data
 	FILE *fp;
@@ -325,7 +441,16 @@ void profiler_output_data() {
 	output_running_time(fp, root_node);
 	fprintf(fp, "\n}");
 	fclose(fp);
-	//printf("finished writing task_tree.dot\n");
+
+	// Task tree
+	fp = fopen(FILE_FOR_TASK_TREE_SUMMARY, "w");
+	//fprintf(fp, "digraph g{\n");
+	fprintf(fp, "digraph g{\nnode [shape=\"record\"]\n");
+	fprintf(fp, GRAPH_TITLE_PRINT_PATTERN, GRAPH_TITLE_TASK_TREE);
+	output_task_tree(fp, root_node);
+	output_total_counters(fp, root_node);
+	fprintf(fp, "\n}");
+	fclose(fp);
 
 	// Time records
 	fp = fopen(FILE_FOR_TIME_RECORDS, "w");
@@ -385,45 +510,81 @@ time_record_t create_time_record(int type, int worker, double val) {
 }
 
 void profiler_add_time_start(task_node_t node, int worker, int start_code) {
-	// Create time record
-	time_record_t record = create_time_record(start_code << 1, worker, 0);
-	if (node->time_record == NULL)
-		node->time_record = record;
-	else {
-		time_record_t temp = node->time_record;
-		while (temp->next != NULL)
-			temp = temp->next;
-		temp->next = record;
-	}
-	// PAPI counts
-	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
-		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
-	record->counters.l1_tcm = values[worker][0];
-	record->counters.l2_tcm = values[worker][1];
+	if (node->level >= 0) {
 
-	// Must be at the end
-	record->counters.time = profiler_get_curtime();
+		// Create time record
+		time_record_t record = create_time_record(start_code << 1, worker, 0);
+		if (node->time_record == NULL)
+			node->time_record = record;
+		else {
+			time_record_t temp = node->time_record;
+			while (temp->next != NULL)
+				temp = temp->next;
+			temp->next = record;
+		}
+		// PAPI counts
+		if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+		record->counters.l1_tcm = values[worker][0];
+		record->counters.l2_tcm = values[worker][1];
+		// Must be at the end
+		record->counters.time = profiler_get_curtime();
+
+	} else if (node->index != 0) {
+
+		// If current record is not a start record
+		node->index = start_code << 1;
+		// PAPI counts
+		if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+		node->counters.l1_tcm = values[worker][0];
+		node->counters.l2_tcm = values[worker][1];
+		// Must be at the end
+		node->counters.time = profiler_get_curtime();
+
+	}
 }
 
 void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	// Must be at the begining
 	double time = profiler_get_curtime();
 
-	// Create time record
-	time_record_t record = create_time_record((stop_code << 1) + 1, worker, time);
-	if (node->time_record == NULL)
-		node->time_record = record;
-	else {
-		time_record_t temp = node->time_record;
-		while (temp->next != NULL)
-			temp = temp->next;
-		temp->next = record;
+	if (node->level >= 0) {
+
+		// Create time record
+		time_record_t record = create_time_record((stop_code << 1) + 1, worker, time);
+		if (node->time_record == NULL)
+			node->time_record = record;
+		else {
+			time_record_t temp = node->time_record;
+			while (temp->next != NULL)
+				temp = temp->next;
+			temp->next = record;
+		}
+		// PAPI counts
+		if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+		record->counters.l1_tcm = values[worker][0];
+		record->counters.l2_tcm = values[worker][1];
+
+	} else {
+
+		// PAPI counts
+		if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
+		// Accumulate
+		if (node->index != -1) {
+			node->child->child->counters.time += time - node->counters.time;
+			node->child->child->counters.l1_tcm += values[worker][0] - node->counters.l1_tcm;
+			node->child->child->counters.l2_tcm += values[worker][1] - node->counters.l2_tcm;
+		}
+		// Insert new stop time
+		node->index = 1;
+		node->counters.time = time;
+		node->counters.l1_tcm = values[worker][0];
+		node->counters.l2_tcm = values[worker][1];
+
 	}
-	// PAPI counts
-	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
-		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
-	record->counters.l1_tcm = values[worker][0];
-	record->counters.l2_tcm = values[worker][1];
 }
 
 /*

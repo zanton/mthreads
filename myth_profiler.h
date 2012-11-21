@@ -8,7 +8,11 @@
 #ifndef MYTH_PROFILER_H_
 #define MYTH_PROFILER_H_
 
+// Ant: enviroment variable for profiler depth limit
+//#define ENV_TASK_DEPTH_LIMIT "TASK_DEPTH_LIMIT"
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/time.h>
 #include <papi.h>
 
@@ -28,7 +32,7 @@ typedef struct time_record {
 
 // Ant: [struct task_node] structure to save tasks' infomation
 typedef struct task_node {
-	int level;
+	char level; 	// task depth, -1 means out of profiling limit, need particular manipulation
 	int index;
 	counter_record counters; // sum of it at each execution
 	time_record_t time_record; // linked list of time_record
@@ -36,7 +40,12 @@ typedef struct task_node {
 	struct task_node * child;
 } task_node, * task_node_t;
 
-
+/*typedef struct task_node_outlimit {
+	struct task_node * parent;
+	struct counter_record start;
+	struct counter_record stop;
+} task_node_outlimit, * task_node_outlimit_t;
+*/
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);

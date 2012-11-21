@@ -13,7 +13,7 @@
 
 void output_task_tree(FILE * fp, task_node_t node);
 void output_running_time(FILE * fp, task_node_t node);
-void output_running_time(FILE * fp, task_node_t node);
+void output_total_counters(FILE * fp, task_node_t node);
 void output_time_records_ex(FILE * fp, task_node_t node);
 void output_time_records_1(FILE * fp, task_node_t node);
 void output_time_records(FILE * fp);
