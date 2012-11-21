@@ -39,7 +39,7 @@ void output_task_tree(FILE * fp, task_node_t node) {
 }
 
 void output_running_time(FILE * fp, task_node_t node) {
-	fprintf(fp, "%d [label=\"%d\\n%0.3lf\"]\n", node->index, node->index, node->running_time);
+	fprintf(fp, "%d [label=\"%d\\n%0.3lf\"]\n", node->index, node->index, node->counters.time);
 	if (node->child != NULL)
 		output_running_time(fp, node->child);
 	if (node->mate != NULL)
@@ -49,7 +49,7 @@ void output_running_time(FILE * fp, task_node_t node) {
 void output_time_records_ex(FILE * fp, task_node_t node) {
 	time_record_t t = node->time_record;
 	while (t != NULL) {
-		fprintf(fp, "[%d:%d]:%d:%0.3lf", t->type % 2, t->type >> 1, t->worker, t->val - base);
+		fprintf(fp, "[%d:%d]:%d:%0.3lf", t->type % 2, t->type >> 1, t->worker, t->counters.time - base);
 		t = t->next;
 		if (t != NULL)
 			fprintf(fp, ", ");
@@ -75,11 +75,11 @@ void output_time_records(FILE * fp) {
 	base = profiler_get_curtime();
 	for (i=0; i<sched_num; i++)
 		if (sched_nodes[i].time_record != NULL) {
-			temp = sched_nodes[i].time_record->val;
+			temp = sched_nodes[i].time_record->counters.time;
 			if (temp < base) base = temp;
 		}
 	if (root_node->time_record != NULL) {
-		temp = root_node->time_record->val;
+		temp = root_node->time_record->counters.time;
 		if (temp < base) base = temp;
 	}
 	fprintf(fp, "time base = %0.3lf\n", base);
@@ -104,20 +104,20 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 	/*
 	int count = 0;
 	if (node->index == 0) {
-		fprintf(fp, "{<b%d> |<s%d>[%c%d][%d]:%0.3lf} | ", count, count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
+		fprintf(fp, "{<b%d> |<s%d>[%c%d][%d]:%0.3lf} | ", count, count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base);
 		count++;
 		t = t->next;
 	}
 	while (t != NULL && t->next != NULL) {
-		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d>[%c%d][%d]:%0.3lf}", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base,
-				count, (t->next->type % 2 == 0)?'s':'o', t->next->type >> 1, t->next->worker, t->next->val - base);
+		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d>[%c%d][%d]:%0.3lf}", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base,
+				count, (t->next->type % 2 == 0)?'s':'o', t->next->type >> 1, t->next->worker, t->next->counters.time - base);
 		count++;
 		t = t->next->next;
 		if (t != NULL)
 			fprintf(fp, " | ");
 	}
 	if (t != NULL) { //node->index == 0) {
-		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d> }", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base, count);
+		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d> }", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base, count);
 	}*/
 
 	int count = 0;
@@ -127,7 +127,7 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 		else {
 			fprintf(fp, "{<b%d>", count);
 			while (t != NULL && t->type%2 == 0) {
-				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
+				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base);
 				t = t->next;
 				fprintf(fp, "|");
 			}
@@ -138,7 +138,7 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 			while (t != NULL && t->type%2 == 1) {
 				if (t->next == NULL || t->next->type%2 == 0)
 					fprintf(fp, "<s%d>", count);
-				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->val - base);
+				fprintf(fp, "(%c%d)(%d):%0.3lf", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base);
 				t = t->next;
 				if (t != NULL && t->type%2 == 1)
 					fprintf(fp, "|");
@@ -205,7 +205,7 @@ void output_task_tree_wtcm_ex(FILE * fp, task_node_t node, int output_code) {
 		else {
 			fprintf(fp, "{<b%d>", count);
 			while (t != NULL && t->type%2 == 0) {
-				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->l1_tcm:t->l2_tcm);
+				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->counters.l1_tcm:t->counters.l2_tcm);
 				t = t->next;
 				fprintf(fp, "|");
 			}
@@ -216,7 +216,7 @@ void output_task_tree_wtcm_ex(FILE * fp, task_node_t node, int output_code) {
 			while (t != NULL && t->type%2 == 1) {
 				if (t->next == NULL || t->next->type%2 == 0)
 					fprintf(fp, "<s%d>", count);
-				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->l1_tcm:t->l2_tcm);
+				fprintf(fp, "(%c%d)(%d):%lld", (t->type%2 == 0)?'s':'o', t->type >> 1, t->worker, (output_code == 0)?t->counters.l1_tcm:t->counters.l2_tcm);
 				t = t->next;
 				if (t != NULL && t->type%2 == 1)
 					fprintf(fp, "|");

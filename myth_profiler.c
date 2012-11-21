@@ -87,10 +87,12 @@ void create_root_node() {
 		// Set up fields
 		root_node->level = 0;
 		root_node->index = 0;
+		root_node->counters.time = 0.0;
+		root_node->counters.l1_tcm = 0;
+		root_node->counters.l2_tcm = 0;
+		root_node->time_record = NULL;
 		root_node->mate = NULL;
 		root_node->child = NULL;
-		root_node->running_time = 0.0;
-		root_node->time_record = NULL;
 	}
 }
 
@@ -102,12 +104,14 @@ void create_sched_nodes(int num) {
 		// Set up fields
 		int i;
 		for (i=0; i<sched_num; i++) {
-			sched_nodes[i].level = 0; // unused
+			sched_nodes[i].level = 0; 		// unused
 			sched_nodes[i].index = i;
-			sched_nodes[i].mate = NULL; // unused
-			sched_nodes[i].child = NULL; // unused
-			sched_nodes[i].running_time = 0.0;
+			sched_nodes[i].counters.time = 0.0;
+			sched_nodes[i].counters.l1_tcm = 0;
+			sched_nodes[i].counters.l2_tcm = 0;
 			sched_nodes[i].time_record = NULL;
+			sched_nodes[i].mate = NULL;		// unused
+			sched_nodes[i].child = NULL;	// unused
 		}
 	}
 }
@@ -229,10 +233,12 @@ task_node_t profiler_create_new_node(task_node_t parent) {
 	// Set up fields
 	new_node->level = parent->level + 1;
 	new_node->index = 0;  // need edited later
+	new_node->counters.time = 0.0;  		// need edited later
+	new_node->counters.l1_tcm = 0;  	// need edited later
+	new_node->counters.l2_tcm = 0;  	// need edited later
+	new_node->time_record = NULL;
 	new_node->mate = NULL;
 	new_node->child = NULL;
-	new_node->running_time = 0.0;  // need edited later
-	new_node->time_record = NULL;
 
 	// Bind new_node to task tree
 	if (parent->child == NULL) {
@@ -260,7 +266,7 @@ int indexing_tasks(task_node_t node, int index) {
 void calculate_running_time_ex(task_node_t node) {
 	time_record_t t = node->time_record;
 	if (t == NULL) {
-		node->running_time = 0;
+		node->counters.time = 0;
 		return;
 	}
 
@@ -270,15 +276,15 @@ void calculate_running_time_ex(task_node_t node) {
 		while (t != NULL && t->type%2 != 0)
 			t = t->next;
 		if (t != NULL)
-			last = t->val;
+			last = t->counters.time;
 		while (t != NULL && t->type%2 == 0)
 			t = t->next;
 		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
 					t = t->next;
 		if (t != NULL)
-			val += t->val - last;
+			val += t->counters.time - last;
 	}
-	node->running_time = val;
+	node->counters.time = val;
 }
 
 void calculate_running_time_1(task_node_t node) {
@@ -371,7 +377,9 @@ time_record_t create_time_record(int type, int worker, double val) {
 	record = profiler_malloc_time_record();
 	record->type = type;
 	record->worker = worker;
-	record->val = val;
+	record->counters.time = val;
+	record->counters.l1_tcm = 0;
+	record->counters.l2_tcm = 0;
 	record->next = NULL;
 	return record;
 }
@@ -390,11 +398,11 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	// PAPI counts
 	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
-	record->l1_tcm = values[worker][0];
-	record->l2_tcm = values[worker][1];
+	record->counters.l1_tcm = values[worker][0];
+	record->counters.l2_tcm = values[worker][1];
 
 	// Must be at the end
-	record->val = profiler_get_curtime();
+	record->counters.time = profiler_get_curtime();
 }
 
 void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
@@ -414,8 +422,8 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	// PAPI counts
 	if ((retval = PAPI_read(EventSet[worker], values[worker])) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_library_init", retval);
-	record->l1_tcm = values[worker][0];
-	record->l2_tcm = values[worker][1];
+	record->counters.l1_tcm = values[worker][0];
+	record->counters.l2_tcm = values[worker][1];
 }
 
 /*

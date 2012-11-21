@@ -12,25 +12,31 @@
 #include <sys/time.h>
 #include <papi.h>
 
+
+typedef struct counter_record {
+	double time; 				// Time value
+	long long l1_tcm; 	// PAPI_L1_TCM
+	long long l2_tcm; 	// PAPI_L2_TCM
+} counter_record, * counter_record_t;
+
 typedef struct time_record {
-	int type; // 0: start, 1: stop
-	double val; // time value
-	int worker;
-	struct time_record * next; // pointer to next node
-
-	long long l1_tcm, l2_tcm; // PAPI_L1_TCM, PAPI_L2_TCM
-
+	int type; 		// briefly, 0: start, 1: stop
+	int worker;		// worker thread's rank
+	counter_record counters; // counter data
+	struct time_record * next; // pointer to next time_record
 } time_record, * time_record_t;
 
 // Ant: [struct task_node] structure to save tasks' infomation
 typedef struct task_node {
 	int level;
 	int index;
-	double running_time;
-	time_record_t time_record;
+	counter_record counters; // sum of it at each execution
+	time_record_t time_record; // linked list of time_record
 	struct task_node * mate;
 	struct task_node * child;
 } task_node, * task_node_t;
+
+
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);
@@ -44,5 +50,6 @@ void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
 //void profiler_add_time_record_wthread(task_node_t node, char type, void * thread);
 task_node_t profiler_get_root_node();
 task_node_t profiler_get_sched_node(int i);
+
 
 #endif /* MYTH_PROFILER_H_ */
