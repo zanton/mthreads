@@ -119,24 +119,6 @@ void output_task_tree_wtime_ex(FILE * fp, task_node_t node) {
 		fprintf(fp, "null\"]\n");
 		return;
 	}
-	/*
-	int count = 0;
-	if (node->index == 0) {
-		fprintf(fp, "{<b%d> |<s%d>[%c%d][%d]:%0.3lf} | ", count, count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base);
-		count++;
-		t = t->next;
-	}
-	while (t != NULL && t->next != NULL) {
-		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d>[%c%d][%d]:%0.3lf}", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base,
-				count, (t->next->type % 2 == 0)?'s':'o', t->next->type >> 1, t->next->worker, t->next->counters.time - base);
-		count++;
-		t = t->next->next;
-		if (t != NULL)
-			fprintf(fp, " | ");
-	}
-	if (t != NULL) { //node->index == 0) {
-		fprintf(fp, "{<b%d>[%c%d][%d]:%0.3lf|<s%d> }", count, (t->type % 2 == 0)?'s':'o', t->type >> 1, t->worker, t->counters.time - base, count);
-	}*/
 
 	int count = 0;
 	while (t != NULL) {

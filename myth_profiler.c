@@ -352,41 +352,6 @@ int indexing_tasks(task_node_t node, int index) {
 	return i;
 }
 
-/*void calculate_running_time_ex(task_node_t node) {
-	time_record_t t = node->time_record;
-	if (t == NULL) {
-		node->counters.time = 0;
-		return;
-	}
-
-	double val = 0;
-	double last = 0;
-	while (t != NULL) {
-		while (t != NULL && t->type%2 != 0)
-			t = t->next;
-		if (t != NULL)
-			last = t->counters.time;
-		while (t != NULL && t->type%2 == 0)
-			t = t->next;
-		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
-					t = t->next;
-		if (t != NULL)
-			val += t->counters.time - last;
-	}
-	node->counters.time = val;
-}
-
-void calculate_running_time(task_node_t node) {
-	if (task_depth_limit >= 0 && node->level > task_depth_limit)
-		return;
-
-	calculate_running_time_ex(node);
-	if (node->child != NULL)
-		calculate_running_time(node->child);
-	if (node->mate != NULL)
-		calculate_running_time(node->mate);
-}*/
-
 void calculate_sum_counters_ex(task_node_t node) {
 	time_record_t t = node->time_record;
 	if (t == NULL) {
@@ -433,77 +398,6 @@ void calculate_sum_counters(task_node_t node) {
 		calculate_sum_counters(node->mate);
 }
 
-/*
-void calculate_l1_tcm_ex(task_node_t node) {
-	time_record_t t = node->time_record;
-	if (t == NULL) {
-		node->counters.l1_tcm = 0;
-		return;
-	}
-
-	long long val = 0;
-	long long last = 0;
-	while (t != NULL) {
-		while (t != NULL && t->type%2 != 0)
-			t = t->next;
-		if (t != NULL)
-			last = t->counters.l1_tcm;
-		while (t != NULL && t->type%2 == 0)
-			t = t->next;
-		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
-					t = t->next;
-		if (t != NULL)
-			val += t->counters.l1_tcm - last;
-	}
-	node->counters.l1_tcm = val;
-}
-
-void calculate_l1_tcm(task_node_t node) {
-	if (task_depth_limit >= 0 && node->level > task_depth_limit)
-		return;
-
-	calculate_l1_tcm_ex(node);
-	if (node->child != NULL)
-		calculate_l1_tcm(node->child);
-	if (node->mate != NULL)
-		calculate_l1_tcm(node->mate);
-}
-
-void calculate_l2_tcm_ex(task_node_t node) {
-	time_record_t t = node->time_record;
-	if (t == NULL) {
-		node->counters.l2_tcm = 0;
-		return;
-	}
-
-	long long val = 0;
-	long long last = 0;
-	while (t != NULL) {
-		while (t != NULL && t->type%2 != 0)
-			t = t->next;
-		if (t != NULL)
-			last = t->counters.l2_tcm;
-		while (t != NULL && t->type%2 == 0)
-			t = t->next;
-		while (t != NULL && t->next != NULL && t->next->type%2 == 1)
-					t = t->next;
-		if (t != NULL)
-			val += t->counters.l2_tcm - last;
-	}
-	node->counters.l2_tcm = val;
-}
-
-void calculate_l2_tcm(task_node_t node) {
-	if (task_depth_limit >= 0 && node->level > task_depth_limit)
-		return;
-
-	calculate_l2_tcm_ex(node);
-	if (node->child != NULL)
-		calculate_l2_tcm(node->child);
-	if (node->mate != NULL)
-		calculate_l2_tcm(node->mate);
-}*/
-
 void profiler_output_data() {
 	// PROFILER OFF
 	if (profiler_off) return;
@@ -518,15 +412,7 @@ void profiler_output_data() {
 	if (root_node->child != NULL)
 		indexing_tasks(root_node->child, 1);
 
-	/*// Calculate running time
-	int i;
-	for (i=0; i<sched_num; i++)
-		calculate_running_time_ex(&sched_nodes[i]);*/ //TODO: del data structure for scheds!?
-
-	/*calculate_running_time(root_node);
-	// Calculate l1_tcm, l2_tcm
-	calculate_l1_tcm(root_node);
-	calculate_l2_tcm(root_node);*/
+	// Calculate running time
 	calculate_sum_counters(root_node);
 
 	// Output data
@@ -698,27 +584,6 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 
 	}
 }
-
-/*
-void profiler_add_time_record(task_node_t node, char type, int worker) {
-	double time = profiler_get_curtime();
-	time_record_t record = create_time_record(type, worker, time);
-	if (node->time_record == NULL)
-		node->time_record = record;
-	else {
-		time_record_t temp = node->time_record;
-		while (temp->next != NULL)
-			temp = temp->next;
-		temp->next = record;
-	}
-}
-
-void profiler_add_time_record_wthread(task_node_t node, char type, void * thread_p) {
-	myth_thread_t thread = (myth_thread_t) thread_p;
-	int worker = (thread)?thread->env->rank:-1;
-	profiler_add_time_record(node, type, worker);
-}
-*/
 
 task_node_t profiler_get_root_node() {
 	return root_node;
