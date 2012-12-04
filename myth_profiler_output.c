@@ -206,9 +206,8 @@ void output_task_tree_wtime_arcs(FILE * fp, task_node_t node) {
 }
 
 void output_task_tree_wtime(FILE * fp) {
-	output_task_tree_wtime_1(fp, root_node);
-	//printf("finished outputing task tree wtime 1\n");
 	output_task_tree_wtime_arcs(fp, root_node);
+	output_task_tree_wtime_1(fp, root_node);
 }
 
 void output_task_tree_wtcm_ex(FILE * fp, task_node_t node, int output_code) {

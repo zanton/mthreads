@@ -8,13 +8,16 @@
 #ifndef MYTH_PROFILER_H_
 #define MYTH_PROFILER_H_
 
-// Ant: enviroment variable for profiler depth limit
-//#define ENV_TASK_DEPTH_LIMIT "TASK_DEPTH_LIMIT"
+// Ant: enviroment variables for profiler
+#define ENV_TASK_DEPTH_LIMIT "TASK_DEPTH_LIMIT"
+#define ENV_PROFILER_OFF "PROFILER_OFF"
+#define ENV_PROFILING_DEPTH_LIMIT "PROFILING_DEPTH_LIMIT"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <papi.h>
+#include <limits.h>
 
 
 typedef struct counter_record {
