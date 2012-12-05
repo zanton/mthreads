@@ -15,6 +15,13 @@
 
 typedef struct myth_running_env
 {
+#ifdef PROFILER_ON
+	node_allocator node_mem;
+	record_allocator record_mem;
+	int EventSet;
+	long long * values;
+#endif /*PROFILER_ON*/
+
 	//The following entries are only accessed from the owner
 	struct myth_thread *this_thread;//Currently executing thread
 #ifdef MYTH_SPLIT_STACK_DESC

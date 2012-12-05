@@ -317,8 +317,8 @@ void myth_emit_log(FILE *fp_prof_out)
 void myth_fini_ex_body(void)
 {
 #ifdef PROFILER_ON
-	// Ant: [prof] [myth_fini_ex_body] output prof data
-	profiler_output_data();
+	// Ant: [prof] [myth_fini_ex_body] finish profiler
+	profiler_fini();
 #endif /*PROFILER_ON*/
 
 	//Output Log

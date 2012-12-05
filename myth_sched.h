@@ -78,11 +78,6 @@ typedef struct myth_sched
 {
 	void *stack;//Call stack
 	myth_context context;//Scheduler context
-
-#ifdef PROFILER_ON
-	// Ant: [prof] [struct myth_sched] pointer to a task_node
-	struct task_node * node;
-#endif /*PROFILER_ON*/
 }myth_sched,*myth_sched_t;
 
 //External Global variables

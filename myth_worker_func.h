@@ -256,7 +256,7 @@ static inline void myth_cleanup_worker(int rank)
 
 #ifdef PROFILER_ON
 	// Ant: [prof] cleanup profiling of worker threads
-	profiler_fini_thread(rank);
+	profiler_fini_worker(rank);
 #endif /*PROFILER_ON*/
 }
 
@@ -269,7 +269,7 @@ static inline void myth_worker_start_ex_body(int rank)
 
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_worker_start_ex_body] set task_node for sched 1..n
-	env->sched.node = profiler_get_sched_node(rank);
+	//env->sched.node = profiler_get_sched_node(rank);
 #endif /*PROFILER_ON*/
 
 	env->sched.stack=NULL;
@@ -310,9 +310,6 @@ static inline void myth_startpoint_init_ex_body(int rank)
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for root task
 	this_th->node = profiler_get_root_node();
-
-	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for sched 0
-	env->sched.node = profiler_get_sched_node(rank);
 
 	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
 	profiler_add_time_stop(this_th->node, env->rank, 18);
@@ -381,7 +378,7 @@ static inline void *myth_worker_thread_fn(void *args)
 
 #ifdef PROFILER_ON
 	// Ant: [prof] initialize profiler for each thread
-	profiler_init_thread(rank);
+	profiler_init_worker(rank);
 #endif /*PROFILER_ON*/
 
 	if (rank == 0) {

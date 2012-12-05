@@ -9,7 +9,6 @@
 #define MYTH_PROFILER_H_
 
 // Ant: enviroment variables for profiler
-#define ENV_TASK_DEPTH_LIMIT "TASK_DEPTH_LIMIT"
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILING_DEPTH_LIMIT "PROFILING_DEPTH_LIMIT"
 
@@ -18,12 +17,15 @@
 #include <sys/time.h>
 #include <papi.h>
 #include <limits.h>
+#include "myth_misc.h"
+#include "myth_profiler_output.h"
 
+//typedef long long counter_value_t;
 
 typedef struct counter_record {
-	double time; 				// Time value
-	long long l1_tcm; 	// PAPI_L1_TCM
-	long long l2_tcm; 	// PAPI_L2_TCM
+	double time;	// Time value
+	long long counter1;
+	long long counter2;
 } counter_record, * counter_record_t;
 
 typedef struct time_record {
@@ -36,23 +38,36 @@ typedef struct time_record {
 // Ant: [struct task_node] structure to save tasks' infomation
 typedef struct task_node {
 	char level; 	// task depth
-	int index;
-	counter_record counters; // sum of it at each execution
+	int index;		// in-level index
+	int parent_index;
 	time_record_t time_record; // linked list of time_record
-	struct task_node * mate;
-	struct task_node * child;
 } task_node, * task_node_t;
+
+
+typedef struct node_allocator {
+	task_node_t mem;
+	int n, N;
+	myth_freelist_t freelist;
+} node_allocator, *node_allocator_t;
+
+typedef struct record_allocator {
+	time_record_t mem;
+	int n, N;
+	myth_freelist_t freelist;
+} record_allocator, *record_allocator_t;
+
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);
-void		profiler_init_thread(int rank);
-void		profiler_fini_thread(int rank);
-task_node_t profiler_create_new_node(task_node_t parent);
-void 		profiler_output_data();
+void		profiler_init_worker(int rank);
+void		profiler_fini_worker(int rank);
+void 		profiler_fini();
+task_node_t profiler_create_new_node(task_node_t parent, int worker);
 void 		profiler_add_time_start(task_node_t node, int worker, int start_code);
 void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
 task_node_t profiler_get_root_node();
-task_node_t profiler_get_sched_node(int i);
-
+void		profiler_free_time_record(time_record_t record);
+void		profiler_free_task_node(task_node_t node);
+void		profiler_output_task_data(task_node_t node);
 
 #endif /* MYTH_PROFILER_H_ */
