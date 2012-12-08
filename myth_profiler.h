@@ -66,8 +66,8 @@ task_node_t profiler_create_new_node(task_node_t parent, int worker);
 void 		profiler_add_time_start(task_node_t node, int worker, int start_code);
 void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
 task_node_t profiler_get_root_node();
-void		profiler_free_time_record(time_record_t record);
-void		profiler_free_task_node(task_node_t node);
+//void		profiler_free_time_record(int worker, time_record_t record);
+//void		profiler_free_task_node(task_node_t node);
 void		profiler_output_task_data(task_node_t node);
 
 #endif /* MYTH_PROFILER_H_ */

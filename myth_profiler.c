@@ -12,6 +12,7 @@
 #include "myth_internal_lock.h"
 #include "myth_init.h"
 #include "myth_worker_func.h"
+#include "assert.h"
 
 #define NUMBER_OF_PAPI_EVENTS 2
 #define MEMORY_SIZE_LIMIT 524288000
@@ -79,47 +80,53 @@ void PAPI_fail(char *file, int line, char *call, int retval)
 }
 
 void init_memory_allocator() {
-	int i;
+	/*int i;
 	myth_running_env_t env;
 	for (i=0; i<num_workers; i++){
 		env = &g_envs[i];
 
 		// Task node memory TODO: observe total mem size?
-		env->node_mem.N = 1;
-		env->node_mem.mem = (task_node_t) myth_malloc(sizeof(task_node));
-		env->node_mem.n = 1;
-		myth_freelist_init(env->node_mem.freelist);
+		//env->node_mem.N = 1;
+		//env->node_mem.mem = (task_node_t) myth_malloc(sizeof(task_node));
+		//assert(env->node_mem.mem);
+		//env->node_mem.n = 1;
+		//myth_freelist_init(env->node_mem.freelist);
 
 		// Time record memory TODO: observe total mem size?
-		env->record_mem.N = 1;
-		env->record_mem.mem = (time_record_t) myth_malloc(sizeof(time_record));
-		env->record_mem.n = 1;
-		myth_freelist_init(env->record_mem.freelist);
+		//env->record_mem.N = 1;
+		//env->record_mem.mem = (time_record_t) myth_malloc(sizeof(time_record));
+		//assert(env->record_mem.mem);
+		//env->record_mem.n = 1;
+		//myth_freelist_init(env->record_mem.freelist);
 
-	}
+	}*/
 }
 
 task_node_t profiler_malloc_task_node(int worker) {
 	// PROFILER OFF
 	if (profiler_off) return NULL;
 
-	//myth_running_env_t env = myth_get_current_env();
-	node_allocator * alloc = &g_envs[worker].node_mem;
-
 	task_node_t ret;
+
+	/*node_allocator * alloc = &g_envs[worker].node_mem;*/
+
 	/*myth_freelist_pop(alloc->freelist, ret);
 	if (ret)
 		return ret;*/
 
-	if (alloc->n == 0) {
+	/*if (alloc->n == 0) {
 		alloc->N *= 2;
 		alloc->mem = (task_node_t) myth_malloc(alloc->N * sizeof(task_node));
-		myth_assert(alloc->mem != NULL);
+		assert(alloc->mem != NULL);
 		alloc->n = alloc->N;
 	}
 	ret = alloc->mem;
 	alloc->mem++;
-	alloc->n--;
+	alloc->n--;*/
+
+	// Use myth_flmalloc()
+	ret = myth_flmalloc(worker, sizeof(task_node));
+
 	//printf("task myth_malloc: %p\n", ret);
 	return ret;
 }
@@ -128,42 +135,49 @@ time_record_t profiler_malloc_time_record(int worker) {
 	// PROFILER OFF
 	if (profiler_off) return NULL;
 
-	//myth_running_env_t env = myth_get_current_env();
-	record_allocator * alloc = &g_envs[worker].record_mem;
-
 	time_record_t ret;
+
+	/*record_allocator * alloc = &g_envs[worker].record_mem;*/
+
 	/*myth_freelist_pop(alloc->freelist, ret);
 	if (ret) {
 		printf("pop from freelist: %p\n", &ret);
 		return ret;
 	}*/
 
-	if (alloc->n == 0) {
+	/*if (alloc->n == 0) {
 		alloc->N *= 2;
 		alloc->mem = (time_record_t) myth_malloc(alloc->N * sizeof(time_record));
-		myth_assert(alloc->mem != NULL);
+		assert(alloc->mem != NULL);
 		alloc->n = alloc->N;
 	}
 	ret = alloc->mem;
 	alloc->mem++;
-	alloc->n--;
+	alloc->n--;*/
+
+	// Use myth_flmalloc()
+	ret = myth_flmalloc(worker, sizeof(time_record));
+
 	//printf("myth_malloc: %p\n", ret);
 	return ret;
 }
 
 void create_root_node() {
+#ifdef PROFILER_ON
 	if  (root_node == NULL) {
 		// Allocate memory
-		root_node = profiler_malloc_task_node(0);
+		root_node = myth_malloc(sizeof(task_node));//profiler_malloc_task_node(0);
 		// Set up fields
 		root_node->level = 0;
 		root_node->index = 0;
 		root_node->parent_index = -1;
 		root_node->time_record = NULL;
 	}
+#endif /*PROFILER_ON*/
 }
 
 void profiler_init(int worker_thread_num) {
+#ifdef PROFILER_ON
 	// Get enviroment variable
 	char * env_var;
 
@@ -196,6 +210,7 @@ void profiler_init(int worker_thread_num) {
 	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
 	FILE * fp;
 	fp = fopen(FILE_FOR_TASK_DATA, "w");
+	fprintf(fp, "# level, in-level index, in-level parent_index, time type, worker, time, counter 1, counter 2\n");
 	fclose(fp);
 
 	// PAPI
@@ -207,9 +222,11 @@ void profiler_init(int worker_thread_num) {
 	retval = PAPI_thread_init( (unsigned long (*) (void)) real_pthread_self);
 	if (retval != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_thread_init", retval);
+#endif /*PROFILER_ON*/
 }
 
 void profiler_init_worker(int worker) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -229,14 +246,15 @@ void profiler_init_worker(int worker) {
 		PAPI_fail(__FILE__, __LINE__, "PAPI_create_eventset", retval);
 	if ((retval = PAPI_add_event(g_envs[worker].EventSet, PAPI_L1_TCM)) != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
-	if ((retval = PAPI_add_event(g_envs[worker].EventSet, PAPI_FP_OPS)) != PAPI_OK)
+	if ((retval = PAPI_add_event(g_envs[worker].EventSet, PAPI_L2_TCM)) != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
 	if ((retval = PAPI_start(g_envs[worker].EventSet)) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_start", retval);
-
+#endif /*PROFILER_ON*/
 }
 
 void profiler_fini_worker(int worker) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -247,16 +265,23 @@ void profiler_fini_worker(int worker) {
 		if (retval != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_unregister_thread", retval);
 	}
+#endif /*PROFILER_ON*/
 }
 
 void profiler_fini() {
+#ifdef PROFILER_ON
+	// PROFILER OFF
+	if (profiler_off) return ;
+
 	int i;
 	for (i=0; i<CHAR_MAX; i++) {
 		myth_internal_lock_destroy(indexer_lock[i]);
 	}
+#endif /*PROFILER_ON*/
 }
 
 task_node_t profiler_create_new_node(task_node_t parent, int worker) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return NULL;
 
@@ -279,9 +304,13 @@ task_node_t profiler_create_new_node(task_node_t parent, int worker) {
 	myth_internal_lock_unlock(indexer_lock[(int) new_node->level]);
 
 	return new_node;
+#else
+	return NULL;
+#endif /*PROFILER_ON*/
 }
 
 time_record_t create_time_record(int type, int worker, double val) {
+#ifdef PROFILER_ON
 	time_record_t record;
 	record = profiler_malloc_time_record(worker);
 	record->type = type;
@@ -291,9 +320,13 @@ time_record_t create_time_record(int type, int worker, double val) {
 	record->counters.counter2 = 0;
 	record->next = NULL;
 	return record;
+#else
+	return NULL;
+#endif /*PROFILER_ON*/
 }
 
 void profiler_add_time_start(task_node_t node, int worker, int start_code) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -347,13 +380,15 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	record->counters.counter1 = g_envs[worker].values[0];
 	record->counters.counter2 = g_envs[worker].values[1];
 
+#endif /*PROFILER_ON*/
 }
 
 task_node_t profiler_get_root_node() {
 	return root_node;
 }
 
-void profiler_free_time_record(time_record_t record) {
+void profiler_free_time_record(int worker, time_record_t record) {
+#ifdef PROFILER_ON
 	/*time_record_t t;
 	//myth_running_env_t env = myth_get_current_env();
 	while (record != NULL) {
@@ -367,18 +402,36 @@ void profiler_free_time_record(time_record_t record) {
 		record = t;
 	}
 	printf("thoat ra khoi free_time_record\n");*/
+
+	// Use myth_flfree()
+	myth_flfree(worker, sizeof(time_record), record);
+#endif /*PROFILER_ON*/
 }
 
 void profiler_free_task_node(task_node_t node) {
+#ifdef PROFILER_ON
 	/*printf("node level %d index %d, %p\n", node->level, node->index, node->time_record);
 	profiler_free_time_record(node->time_record);
 	//myth_running_env_t env = myth_get_current_env();
 	//myth_freelist_push(env->record_mem.freelist, node);
 	printf("task myth_free: %p\n", node);
 	myth_free(node, sizeof(task_node));*/
+
+	// Use myth_flfree()
+	myth_running_env_t env = myth_get_current_env();
+	time_record_t t = node->time_record;
+	time_record_t tt;
+	while (t != NULL) {
+		tt = t->next;
+		profiler_free_time_record(env->rank, t);
+		t = tt;
+	}
+	myth_flfree(env->rank, sizeof(task_node), node);
+#endif /*PROFILER_ON*/
 }
 
 void profiler_output_task_data(task_node_t node) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -398,5 +451,7 @@ void profiler_output_task_data(task_node_t node) {
 	node->time_record = NULL;
 
 	fclose(fp);
-}
 
+	profiler_free_task_node(node);
+#endif /*PROFILER_ON*/
+}
