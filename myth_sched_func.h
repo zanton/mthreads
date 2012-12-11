@@ -927,7 +927,8 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 #ifdef PROFILER_ON
 	// Ant: [record time] [o13] task ends, myth_entry_point_cleanup()
 	profiler_add_time_stop(this_thread->node, this_thread->env->rank, 13);
-	profiler_output_task_data(this_thread->node);
+	profiler_mark_delete_task_node(this_thread->node);
+	//profiler_output_task_data(this_thread->node);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_NO_JOIN

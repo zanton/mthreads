@@ -33,6 +33,7 @@ typedef struct time_record {
 	int worker;		// worker thread's rank
 	counter_record counters; // counter data
 	struct time_record * next; // pointer to next time_record
+	struct task_node * node;
 } time_record, * time_record_t;
 
 // Ant: [struct task_node] structure to save tasks' infomation
@@ -40,11 +41,12 @@ typedef struct task_node {
 	char level; 	// task depth
 	int index;		// in-level index
 	int parent_index;
-	time_record_t time_record; // linked list of time_record
+	int counter; 	// number of time records pointing to it, LSB=0 -> task's running, 1 -> task ended
+	int worker;		// worker on which it's allocated
 } task_node, * task_node_t;
 
 
-typedef struct node_allocator {
+/*typedef struct node_allocator {
 	task_node_t mem;
 	int n, N;
 	myth_freelist_t freelist;
@@ -55,7 +57,7 @@ typedef struct record_allocator {
 	int n, N;
 	myth_freelist_t freelist;
 } record_allocator, *record_allocator_t;
-
+*/
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);
@@ -65,9 +67,8 @@ void 		profiler_fini();
 task_node_t profiler_create_new_node(task_node_t parent, int worker);
 void 		profiler_add_time_start(task_node_t node, int worker, int start_code);
 void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
-task_node_t profiler_get_root_node();
-//void		profiler_free_time_record(int worker, time_record_t record);
-//void		profiler_free_task_node(task_node_t node);
-void		profiler_output_task_data(task_node_t node);
+task_node_t profiler_create_root_node();
+void		profiler_mark_delete_task_node(task_node_t node);
+void		profiler_write_to_file(int worker);
 
 #endif /* MYTH_PROFILER_H_ */

@@ -20,6 +20,8 @@ typedef struct myth_running_env
 	//record_allocator record_mem;
 	int EventSet;
 	long long * values;
+	time_record_t head, tail;
+	int num_time_records;
 #endif /*PROFILER_ON*/
 
 	//The following entries are only accessed from the owner
