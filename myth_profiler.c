@@ -19,12 +19,16 @@ int num_workers = 0;	// number of workers
 task_node_t root_node = NULL;	//TODO: linked list of all task nodes?
 
 // Environment variables
-//char task_depth_limit = CHAR_MAX;		// Profiling task depth limit,CHAR_MAX (127) means unlimited
 char profiler_off = 0;				// To turn profiler off; on by default
 char profiling_depth_limit = CHAR_MAX;	// Profiling depth limit, CHAR_MAX (127) means unlimited
+char num_papi_events = 2;
+int papi_event_codes[MAX_NUM_PAPI_EVENTS];
+int default_papi_event_codes[MAX_NUM_PAPI_EVENTS] = {PAPI_L1_TCM, PAPI_L2_TCM, PAPI_NULL, PAPI_NULL};
+char * papi_event_names[MAX_NUM_PAPI_EVENTS];
+char * default_papi_event_names[MAX_NUM_PAPI_EVENTS] = {"PAPI_L1_TCM", "PAPI_L2_TCM", "PAPI_NULL", "PAPI_NULL"};
 
 // PAPI
-int retval;
+__thread int retval;
 
 // In-level indexer
 int indexer[CHAR_MAX];	// level-based
@@ -151,10 +155,28 @@ time_record_t profiler_malloc_time_record(int worker) {
 	return ret;
 }
 
+long long * profiler_malloc_long_long_array(int worker) {
+	// PROFILER OFF
+	if (profiler_off) return NULL;
+
+	long long * ret;
+
+	// Use myth_flmalloc()
+	ret = myth_flmalloc(worker, num_papi_events * sizeof(long long));
+
+	return ret;
+}
+
+void profiler_free_long_long_array(int worker, long long * values) {
+#ifdef PROFILER_ON
+	myth_flfree(worker, num_papi_events * sizeof(long long), values);
+#endif /*PROFILER_ON*/
+}
 
 void profiler_free_time_record(int worker, time_record_t record) {
 #ifdef PROFILER_ON
 	// Use myth_flfree()
+	profiler_free_long_long_array(worker, record->counters.values);
 	myth_flfree(worker, sizeof(time_record), record);
 #endif /*PROFILER_ON*/
 }
@@ -191,6 +213,27 @@ void profiler_init(int worker_thread_num) {
 		profiling_depth_limit = atoi(env_var);
 	}
 
+	// NUM_PAPI_EVENTS environment variable
+	env_var = getenv(ENV_NUM_PAPI_EVENTS);
+	if (env_var) {
+		num_papi_events = atoi(env_var);
+	}
+
+	// PAPI_EVENT_x environment variables
+	int i, retvall;
+	char name[MAX_PAPI_EVENT_NAME_LENGTH];
+	for (i=0; i<num_papi_events; i++) {
+		sprintf(name, "%s%d", ENV_PAPI_EVENT_NAME, i+1);
+		papi_event_names[i] = getenv(name);
+		if (papi_event_names[i] == NULL) {
+			papi_event_names[i] = default_papi_event_names[i];
+			papi_event_codes[i] = default_papi_event_codes[i];
+		} else {
+			if ((retvall = PAPI_event_name_to_code(papi_event_names[i], &papi_event_codes[i])) != PAPI_OK)
+				PAPI_fail(__FILE__, __LINE__, "PAPI_event_name_to_code", retvall);
+		}
+	}
+
 	// General initialization
 	num_workers = worker_thread_num;
 	init_memory_allocator();
@@ -213,6 +256,7 @@ void profiler_init(int worker_thread_num) {
 	// General data file
 	fp = fopen(get_data_file_name_for_general(), "w");
 	fprintf(fp, "Overview profile data\n");
+	fprintf(fp, "num_papi_events = %d\n", num_papi_events);
 	fclose(fp);
 
 	// PAPI
@@ -241,7 +285,7 @@ void profiler_init_worker(int worker) {
 
 	// Initialize worker thread-local variables
 	g_envs[worker].EventSet = PAPI_NULL;
-	g_envs[worker].values = (long long *) myth_malloc(NUMBER_OF_PAPI_EVENTS * sizeof(long long));
+	g_envs[worker].values = (long long *) myth_malloc(num_papi_events * sizeof(long long));
 	g_envs[worker].head = NULL;
 	g_envs[worker].tail = NULL;
 	g_envs[worker].num_time_records = 0;
@@ -250,16 +294,21 @@ void profiler_init_worker(int worker) {
 	filename = myth_malloc(30 * sizeof(char));
 	sprintf(filename, "%s%d%s", FILE_FOR_EACH_WORKER_THREAD, worker, ".txt");
 	FILE * fp = fopen(filename, "w");
-	fprintf(fp, "# level, in-level index, in-level parent_index, time type, worker, time, counter 1, counter 2\n");
+	fprintf(fp, "# level, in-level index, in-level parent_index, time type, worker, time");
+	int i;
+	//char event_name[20];
+	for (i=0; i<num_papi_events; i++)
+		fprintf(fp, ", %s", papi_event_names[i]);
+	fprintf(fp, "\n");
 	fclose(fp);
 
 	// Initialize EventSet
 	if ((retval = PAPI_create_eventset(&g_envs[worker].EventSet)) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_create_eventset", retval);
-	if ((retval = PAPI_add_event(g_envs[worker].EventSet, PAPI_L1_TCM)) != PAPI_OK)
+	for (i=0; i<num_papi_events; i++) {
+		if ((retval = PAPI_add_event(g_envs[worker].EventSet, papi_event_codes[i])) != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
-	if ((retval = PAPI_add_event(g_envs[worker].EventSet, PAPI_L2_TCM)) != PAPI_OK)
-			PAPI_fail(__FILE__, __LINE__, "PAPI_add_event", retval);
+	}
 	if ((retval = PAPI_start(g_envs[worker].EventSet)) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_start", retval);
 #endif /*PROFILER_ON*/
@@ -387,8 +436,15 @@ void profiler_write_to_file(int worker) {
 	while (t != NULL) {
 		tt = t->next;
 		fprintf(fp, "%d, %d, %d, ", t->node->level, t->node->index, t->node->parent_index);
-		fprintf(fp, "%d, %d, ", t->type, t->worker);
-		fprintf(fp, "%lf, %lld, %lld\n", t->counters.time, t->counters.counter1, t->counters.counter2);
+		fprintf(fp, "%d, %d, %lf, ", t->type, t->worker, t->counters.time);
+		int i;
+		for (i=0; i<num_papi_events; i++) {
+			fprintf(fp, "%lld", t->counters.values[i]);
+			if (i == num_papi_events-1)
+				fprintf(fp, "\n");
+			else
+				fprintf(fp, ", ");
+		}
 		t->node->counter -= 2;
 		if (t->node->counter == 1)
 			profiler_delete_task_node(t->node);
@@ -410,8 +466,11 @@ time_record_t create_time_record(int type, int worker, double time) {
 	record->type = type;
 	record->worker = worker;
 	record->counters.time = time;
-	record->counters.counter1 = 0;
-	record->counters.counter2 = 0;
+	record->counters.values = profiler_malloc_long_long_array(worker);
+	int i;
+	for (i=0; i<num_papi_events; i++) {
+		record->counters.values[i] = 0;
+	}
 	record->next = NULL;
 
 	return record;
@@ -444,11 +503,7 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	}
 	// Pointer to node
 	record->node = node;
-
-	// Measurement data limitation
 	env->num_time_records++;
-	if (env->num_time_records > num_time_records_threshold)
-		profiler_write_to_file(worker);
 
 	// Increment node's counter
 	node->counter += 2;
@@ -456,11 +511,15 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	// PAPI counts
 	if ((retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_read", retval);
-	record->counters.counter1 = g_envs[worker].values[0];
-	record->counters.counter2 = g_envs[worker].values[1];
+	int i;
+	for (i=0; i<num_papi_events; i++)
+		record->counters.values[i] = g_envs[worker].values[i];
 	//TODO: Must be at the end
 	record->counters.time = profiler_get_curtime();
 
+	// Measurement data limitation (must be after record data assignment)
+	if (env->num_time_records > num_time_records_threshold)
+		profiler_write_to_file(worker);
 }
 
 void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
@@ -479,7 +538,6 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	// Attach to env's time record list
 	myth_running_env_t env;
 	env = myth_get_current_env();//g_envs[worker];
-
 	if (env->num_time_records == 0) {
 		env->head = record;
 		env->tail = record;
@@ -490,11 +548,7 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	}
 	// Pointer to node
 	record->node = node;
-
-	// Measurement data limitation
 	env->num_time_records++;
-	if (env->num_time_records > num_time_records_threshold)
-		profiler_write_to_file(worker);
 
 	// Increment node's counter
 	node->counter += 2;
@@ -502,9 +556,13 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	// PAPI counts
 	if ((retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 		PAPI_fail(__FILE__, __LINE__, "PAPI_read", retval);
-	record->counters.counter1 = g_envs[worker].values[0];
-	record->counters.counter2 = g_envs[worker].values[1];
+	int i;
+	for (i=0; i<num_papi_events; i++)
+		record->counters.values[i] = g_envs[worker].values[i];
 
+	// Measurement data limitation (must be after record data assignment)
+	if (env->num_time_records > num_time_records_threshold)
+		profiler_write_to_file(worker);
 #endif /*PROFILER_ON*/
 }
 

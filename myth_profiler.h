@@ -11,13 +11,17 @@
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILING_DEPTH_LIMIT "PROFILING_DEPTH_LIMIT"
+#define ENV_NUM_PAPI_EVENTS "NUM_PAPI_EVENTS"
+#define ENV_PAPI_EVENT_NAME "PAPI_EVENT_"
+
+#define MAX_NUM_PAPI_EVENTS 4
+#define MAX_PAPI_EVENT_NAME_LENGTH 13
 
 #define DIR_FOR_PROF_DATA "./tsprof"
 //#define FILE_FOR_TASK_DATA "./tsprof/task_data.txt"
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
-#define NUMBER_OF_PAPI_EVENTS 2
 #define EACH_CORE_MEMORY_SIZE_LIMIT 200 // Megabytes
 
 #include <stdio.h>
@@ -27,12 +31,10 @@
 #include <limits.h>
 #include "myth_misc.h"
 
-//typedef long long counter_value_t;
 
 typedef struct counter_record {
 	double time;	// Time value
-	long long counter1;
-	long long counter2;
+	long long * values;
 } counter_record, * counter_record_t;
 
 typedef struct time_record {
@@ -52,19 +54,6 @@ typedef struct task_node {
 	int worker;		// worker on which it's allocated
 } task_node, * task_node_t;
 
-
-/*typedef struct node_allocator {
-	task_node_t mem;
-	int n, N;
-	myth_freelist_t freelist;
-} node_allocator, *node_allocator_t;
-
-typedef struct record_allocator {
-	time_record_t mem;
-	int n, N;
-	myth_freelist_t freelist;
-} record_allocator, *record_allocator_t;
-*/
 
 double 		profiler_get_curtime();
 void 		profiler_init(int worker_thread_num);
