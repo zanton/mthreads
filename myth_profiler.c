@@ -14,10 +14,6 @@
 #include "myth_worker_func.h"
 #include "assert.h"
 
-#define NUMBER_OF_PAPI_EVENTS 2
-#define EACH_CORE_MEMORY_SIZE_LIMIT 200 // Megabytes
-
-
 // For profiler
 int num_workers = 0;	// number of workers
 task_node_t root_node = NULL;	//TODO: linked list of all task nodes?
@@ -26,16 +22,6 @@ task_node_t root_node = NULL;	//TODO: linked list of all task nodes?
 //char task_depth_limit = CHAR_MAX;		// Profiling task depth limit,CHAR_MAX (127) means unlimited
 char profiler_off = 0;				// To turn profiler off; on by default
 char profiling_depth_limit = CHAR_MAX;	// Profiling depth limit, CHAR_MAX (127) means unlimited
-
-// For memory allocators
-/*task_node_t * node_mem;
-int *n_nodes, *N_nodes;
-time_record_t * record_mem;
-int *n_records, *N_records;
-
-// For memory freelists
-myth_freelist_t * freelist_node;
-myth_freelist_t * freelist_record;*/
 
 // PAPI
 int retval;
@@ -372,13 +358,15 @@ task_node_t profiler_create_new_node(task_node_t parent, int worker) {
 
 void profiler_delete_task_node(task_node_t node) {
 #ifdef PROFILER_ON
-	profiler_free_task_node(node->worker, node);
+	if (node != NULL)
+		profiler_free_task_node(node->worker, node);
 #endif /*PROFILER_ON*/
 }
 
 void profiler_mark_delete_task_node(task_node_t node) {
 #ifdef PROFILER_ON
-	node->counter++; // means that its execution has ended, it can be deleted if there's no time record pointing to it
+	if (node != NULL)
+		node->counter++; // means that its execution has ended, it can be deleted if there's no time record pointing to it
 #endif /*PROFILER_ON*/
 }
 
@@ -407,6 +395,7 @@ void profiler_write_to_file(int worker) {
 		profiler_free_time_record(worker, t);
 		t = tt;
 	}
+	env->num_time_records = 0;
 	env->head = env->tail = NULL;
 
 	// Close file

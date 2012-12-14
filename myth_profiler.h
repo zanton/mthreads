@@ -12,13 +12,20 @@
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILING_DEPTH_LIMIT "PROFILING_DEPTH_LIMIT"
 
+#define DIR_FOR_PROF_DATA "./tsprof"
+//#define FILE_FOR_TASK_DATA "./tsprof/task_data.txt"
+#define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
+#define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
+
+#define NUMBER_OF_PAPI_EVENTS 2
+#define EACH_CORE_MEMORY_SIZE_LIMIT 200 // Megabytes
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <papi.h>
 #include <limits.h>
 #include "myth_misc.h"
-#include "myth_profiler_output.h"
 
 //typedef long long counter_value_t;
 
