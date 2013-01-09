@@ -248,16 +248,17 @@ static inline void myth_cleanup_worker(int rank)
 	if (fl_num)
 		fprintf(stderr,"Rank : %d freelist stack entry : %d\n",rank,fl_num);
 #endif
+
+#ifdef PROFILER_ON
+	// Ant: [prof] cleanup profiling of worker threads, must be called before myth_flmalloc_fini_worker()
+	profiler_fini_worker(rank);
+#endif /*PROFILER_ON*/
+
 	//Release allocator
 	myth_flmalloc_fini_worker(rank);
 	myth_malloc_wrapper_fini_worker(rank);
 	//finalize logger
 	myth_log_worker_fini(env);
-
-#ifdef PROFILER_ON
-	// Ant: [prof] cleanup profiling of worker threads
-	profiler_fini_worker(rank);
-#endif /*PROFILER_ON*/
 }
 
 //Execute worker thread scheduling loop

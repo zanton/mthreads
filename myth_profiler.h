@@ -10,19 +10,20 @@
 
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
-#define ENV_PROFILING_DEPTH_LIMIT "PROFILING_DEPTH_LIMIT"
-#define ENV_NUM_PAPI_EVENTS "NUM_PAPI_EVENTS"
-#define ENV_PAPI_EVENT_NAME "PAPI_EVENT_"
+#define ENV_PROFILER_DEPTH_LIMIT "PROFILER_DEPTH_LIMIT"
+#define ENV_PROFILER_NUM_PAPI_EVENTS "PROFILER_NUM_PAPI_EVENTS"
+#define ENV_PROFILER_PAPI_EVENT_NAME "PROFILER_PAPI_EVENT_"
+#define ENV_PROFILER_MEM_SIZE_LIMIT "PROFILER_MEM_SIZE_LIMIT"
 
 #define MAX_NUM_PAPI_EVENTS 4
-#define MAX_PAPI_EVENT_NAME_LENGTH 13
+#define MAX_PAPI_EVENT_NAME_LENGTH 22
 
 #define DIR_FOR_PROF_DATA "./tsprof"
 //#define FILE_FOR_TASK_DATA "./tsprof/task_data.txt"
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
-#define EACH_CORE_MEMORY_SIZE_LIMIT 200 // Megabytes
+#define EACH_CORE_MEMORY_SIZE_LIMIT 100 // Megabytes
 
 #include <stdio.h>
 #include <stdlib.h>
