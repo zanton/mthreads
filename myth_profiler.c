@@ -278,11 +278,11 @@ void profiler_init(int worker_thread_num) {
 	// Open overview data file
 	fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
 	fprintf(fp_prof_overview, "Overview profile data\n");
-	fprintf(fp_prof_overview, "num_workers = %d\n", profiler_num_workers);
+	fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
 	fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
 	fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
-	fprintf(fp_prof_overview, "profiling_depth_limit = %d\n", profiler_depth_limit);
-	fprintf(fp_prof_overview, "num_papi_events = %d\n", profiler_num_papi_events);
+	fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
+	fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
 	for (i=0; i<profiler_num_papi_events; i++) {
 		fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
 	}
