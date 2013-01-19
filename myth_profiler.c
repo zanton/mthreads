@@ -278,6 +278,7 @@ void profiler_init(int worker_thread_num) {
 	// Open overview data file
 	fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
 	fprintf(fp_prof_overview, "Overview profile data\n");
+	fprintf(fp_prof_overview, "profiler_off = %d\n", profiler_off);
 	fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
 	fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
 	fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
@@ -360,6 +361,11 @@ void profiler_fini() {
 	}
 	// Destroy overview file lock
 	myth_internal_lock_destroy(overviewfile_lock);
+
+	// Print info about number of levels, number of tasks per level
+	for (i=0; i<CHAR_MAX; i++)
+		if (indexer[i] != 0)
+			fprintf(fp_prof_overview, "Level %d: %d task(s)\n", i, indexer[i]);
 
 	// General data file
 	fclose(fp_prof_overview);
