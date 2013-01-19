@@ -36,7 +36,7 @@
 #define INITIAL_QUEUE_SIZE (65536*2)
 
 //Wrap malloc function as worker-private freelist
-#define MYTH_WRAP_MALLOC
+//#define MYTH_WRAP_MALLOC
 
 //Wrap and multipelx I/O functions
 //#define MYTH_WRAP_SOCKIO
@@ -224,8 +224,5 @@
 //disable inlined context switch
 #undef MYTH_INLINE_CONTEXT
 #endif
-
-// Profiler based on task stretches
-#define PROFILER_ON
 
 #endif /* MYTH_CONFIG_H_ */

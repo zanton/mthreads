@@ -45,6 +45,15 @@ int num_time_records_threshold;
 // Data filenames
 __thread char * profiler_filename;
 
+#ifdef PROFILER_ADVANCED_MALLOC
+// Advanced malloc
+time_record_t * allocator_record;
+long long ** allocator_long_long;
+int allocator_record_N, allocator_long_long_N;
+int * allocator_record_n, * allocator_long_long_n;
+#endif /*PROFILER_ADVANCED_MALLOC*/
+
+
 double profiler_get_curtime()
 {
 	struct timeval tv;
@@ -77,27 +86,45 @@ void PAPI_fail(char *file, int line, char *call, int retval)
     exit(1);
 }
 
-void init_memory_allocator() {
-	/*int i;
-	myth_running_env_t env;
-	for (i=0; i<num_workers; i++){
-		env = &g_envs[i];
+void profiler_malloc_init() {
+#ifdef PROFILER_ADVANCED_MALLOC
+	allocator_record = (time_record_t *) myth_malloc(profiler_num_workers * sizeof(time_record_t));
+	allocator_long_long = (long long **) myth_malloc(profiler_num_workers * sizeof(long long *));
+	allocator_record_n = (int *) myth_malloc(profiler_num_workers * sizeof(int));
+	allocator_long_long_n = (int *) myth_malloc(profiler_num_workers * sizeof(int));
+	allocator_record_N = num_time_records_threshold;
+	allocator_long_long_N = num_time_records_threshold;
+	int i;
+	for (i=0; i<profiler_num_workers; i++) {
+		allocator_record[i] = NULL;
+		allocator_long_long[i] = NULL;
+	}
+#endif /*PROFILER_ADVANCED_MALLOC*/
+}
 
-		// Task node memory TODO: observe total mem size?
-		//env->node_mem.N = 1;
-		//env->node_mem.mem = (task_node_t) myth_malloc(sizeof(task_node));
-		//assert(env->node_mem.mem);
-		//env->node_mem.n = 1;
-		//myth_freelist_init(env->node_mem.freelist);
+void profiler_malloc_init_worker(int worker) {
+#ifdef PROFILER_ADVANCED_MALLOC
+	allocator_record[worker] = myth_flmalloc(worker, allocator_record_N * sizeof(task_node));
+	allocator_long_long[worker] = myth_flmalloc(worker, allocator_long_long_N * profiler_num_papi_events * sizeof(long long));
+	allocator_record_n[worker] = 0;
+	allocator_long_long_n[worker] = 0;
+#endif /*PROFILER_ADVANCED_MALLOC*/
+}
 
-		// Time record memory TODO: observe total mem size?
-		//env->record_mem.N = 1;
-		//env->record_mem.mem = (time_record_t) myth_malloc(sizeof(time_record));
-		//assert(env->record_mem.mem);
-		//env->record_mem.n = 1;
-		//myth_freelist_init(env->record_mem.freelist);
+void profiler_malloc_fini() {
+#ifdef PROFILER_ADVANCED_MALLOC
+	myth_free(allocator_record, profiler_num_workers * sizeof(time_record_t));
+	myth_free(allocator_long_long, profiler_num_workers * sizeof(long long *));
+	myth_free(allocator_record_n, profiler_num_workers * sizeof(int));
+	myth_free(allocator_long_long_n, profiler_num_workers * sizeof(int));
+#endif /*PROFILER_ADVANCED_MALLOC*/
+}
 
-	}*/
+void profiler_malloc_fini_worker(int worker) {
+#ifdef PROFILER_ADVANCED_MALLOC
+	myth_flfree(worker, allocator_record_N * sizeof(task_node), allocator_record[worker]);
+	myth_flfree(worker, allocator_long_long_N * profiler_num_papi_events * sizeof(long long), allocator_long_long[worker]);
+#endif /*PROFILER_ADVANCED_MALLOC*/
 }
 
 task_node_t profiler_malloc_task_node(int worker) {
@@ -106,27 +133,10 @@ task_node_t profiler_malloc_task_node(int worker) {
 
 	task_node_t ret;
 
-	/*node_allocator * alloc = &g_envs[worker].node_mem;*/
-
-	/*myth_freelist_pop(alloc->freelist, ret);
-	if (ret)
-		return ret;*/
-
-	/*if (alloc->n == 0) {
-		alloc->N *= 2;
-		alloc->mem = (task_node_t) myth_malloc(alloc->N * sizeof(task_node));
-		assert(alloc->mem != NULL);
-		alloc->n = alloc->N;
-	}
-	ret = alloc->mem;
-	alloc->mem++;
-	alloc->n--;*/
-
 	// Use myth_flmalloc()
 	ret = myth_flmalloc(worker, sizeof(task_node));
-	assert(ret != NULL);
+	//assert(ret != NULL);
 
-	//printf("task myth_malloc: %p\n", ret);
 	return ret;
 }
 
@@ -136,29 +146,24 @@ time_record_t profiler_malloc_time_record(int worker) {
 
 	time_record_t ret;
 
-	/*record_allocator * alloc = &g_envs[worker].record_mem;*/
-
-	/*myth_freelist_pop(alloc->freelist, ret);
-	if (ret) {
-		printf("pop from freelist: %p\n", &ret);
-		return ret;
-	}*/
-
-	/*if (alloc->n == 0) {
-		alloc->N *= 2;
-		alloc->mem = (time_record_t) myth_malloc(alloc->N * sizeof(time_record));
-		assert(alloc->mem != NULL);
-		alloc->n = alloc->N;
+#ifdef PROFILER_ADVANCED_MALLOC
+	int i = allocator_record_n[worker];
+	assert(i <= allocator_record_N);
+	if (i == allocator_record_N) {
+		// Write to file
+		profiler_write_to_file(worker);
+		// Reset
+		allocator_record_n[worker] = 0;
+		i = 0;
 	}
-	ret = alloc->mem;
-	alloc->mem++;
-	alloc->n--;*/
-
+	ret = &allocator_record[worker][i];
+	allocator_record_n[worker]++;
+#else
 	// Use myth_flmalloc()
 	ret = myth_flmalloc(worker, sizeof(time_record));
-	assert(ret != NULL);
+	//assert(ret != NULL);
+#endif /*PROFILER_ADVANCED_MALLOC*/
 
-	//printf("myth_malloc: %p\n", ret);
 	return ret;
 }
 
@@ -168,10 +173,22 @@ long long * profiler_malloc_long_long_array(int worker) {
 
 	long long * ret = NULL;
 
-	// Use myth_flmalloc()
 	if (profiler_num_papi_events > 0) {
+#ifdef PROFILER_ADVANCED_MALLOC
+		int i = allocator_long_long_n[worker];
+		assert(i <= allocator_long_long_N * profiler_num_papi_events);
+		if (i == allocator_long_long_N * profiler_num_papi_events) {
+			// Reset
+			allocator_long_long_n[worker] = 0;
+			i = 0;
+		}
+		ret = &allocator_long_long[worker][i];
+		allocator_long_long_n[worker] += profiler_num_papi_events;
+#else
+		// Use myth_flmalloc()
 		ret = myth_flmalloc(worker, profiler_num_papi_events * sizeof(long long));
-		assert(ret != NULL);
+		//assert(ret != NULL);
+#endif /*PROFILER_ADVANCED_MALLOC*/
 	}
 
 	return ret;
@@ -179,16 +196,24 @@ long long * profiler_malloc_long_long_array(int worker) {
 
 void profiler_free_long_long_array(int worker, long long * values) {
 #ifdef PROFILER_ON
-	if (profiler_num_papi_events > 0)
+	if (profiler_num_papi_events > 0) {
+#ifdef PROFILER_ADVANCED_MALLOC
+#else
 		myth_flfree(worker, profiler_num_papi_events * sizeof(long long), values);
+#endif /*PROFILER_ADVANCED_MALLOC*/
+	}
 #endif /*PROFILER_ON*/
 }
 
 void profiler_free_time_record(int worker, time_record_t record) {
 #ifdef PROFILER_ON
-	// Use myth_flfree()
+
+#ifdef PROFILER_ADVANCED_MALLOC
+#else
 	profiler_free_long_long_array(worker, record->counters.values);
 	myth_flfree(worker, sizeof(time_record), record);
+#endif /*PROFILER_ADVANCED_MALLOC*/
+
 #endif /*PROFILER_ON*/
 }
 
@@ -253,16 +278,16 @@ void profiler_init(int worker_thread_num) {
 		profiler_mem_size_limit = EACH_CORE_MEMORY_SIZE_LIMIT;
 	}
 
+	// Memory size limit
+	num_time_records_threshold = profiler_mem_size_limit * 1024 * 1024 / sizeof(time_record);
+
 	// General initialization
 	profiler_num_workers = worker_thread_num;
-	init_memory_allocator();
+	profiler_malloc_init();
 
 	// Initialize overview file lock
 	overviewfile_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(overviewfile_lock);
-
-	// Memory size limit
-	num_time_records_threshold = profiler_mem_size_limit * 1024 * 1024 / sizeof(time_record);
 
 	// Initialize indexer
 	int j;
@@ -323,6 +348,9 @@ void profiler_init_worker(int worker) {
 	g_envs[worker].tail = NULL;
 	g_envs[worker].num_time_records = 0;
 
+	// Memory allocator
+	profiler_malloc_init_worker(worker);
+
 	// Worker data file
 	profiler_filename = myth_malloc(30 * sizeof(char));
 	sprintf(profiler_filename, "%s%d%s", FILE_FOR_EACH_WORKER_THREAD, worker, ".txt");
@@ -369,6 +397,9 @@ void profiler_fini() {
 
 	// General data file
 	fclose(fp_prof_overview);
+
+	// Memory allocator
+	profiler_malloc_fini();
 #endif /*PROFILER_ON*/
 }
 
@@ -379,6 +410,9 @@ void profiler_fini_worker(int worker) {
 
 	// Write data to file
 	profiler_write_to_file(worker);
+
+	// Memory allocator
+	profiler_malloc_fini_worker(worker);
 
 	// Worker thread-local variables
 	if (profiler_filename != NULL)
@@ -487,7 +521,7 @@ void profiler_write_to_file(int worker) {
 	// Open file
 	FILE *fp;
 	fp = fopen(get_data_file_name_for_worker(), "a");
-	assert(fp != NULL);
+	//assert(fp != NULL);
 
 	// Write to file
 	while (t != NULL) {
@@ -523,7 +557,7 @@ void profiler_write_to_file(int worker) {
 
 	myth_internal_lock_lock(overviewfile_lock);
 	fp = fp_prof_overview;
-	assert(fp != NULL);
+	//assert(fp != NULL);
 	fprintf(fp, "\nprofiler_write_to_file()\n");
 	fprintf(fp, "%lf\n", start_time);
 	fprintf(fp, "worker: %d\n", worker);
@@ -539,6 +573,7 @@ time_record_t create_time_record(int type, int worker, double time) {
 #ifdef PROFILER_ON
 	time_record_t record;
 	record = profiler_malloc_time_record(worker);
+	assert(record != NULL);
 	record->type = type;
 	record->worker = worker;
 	record->counters.time = time;
@@ -573,7 +608,7 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 		env->head = record;
 		env->tail = record;
 	} else {
-		assert(env->tail != NULL);
+		//assert(env->tail != NULL);
 		env->tail->next = record;
 		env->tail = record;
 	}
@@ -595,12 +630,17 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	//TODO: Must be at the end
 	record->counters.time = profiler_get_curtime();
 
+#ifdef PROFILER_ADVANCED_MALLOC
+#else
 	// Measurement data limitation (must be after record data assignment)
 	if (env->num_time_records > num_time_records_threshold)
 		profiler_write_to_file(worker);
+#endif /*PROFILER_ADVANCED_MALLOC*/
+#endif /*PROFILER_ON*/
 }
 
 void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
+#ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -620,7 +660,7 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 		env->head = record;
 		env->tail = record;
 	} else {
-		assert(env->tail != NULL);
+		//assert(env->tail != NULL);
 		env->tail->next = record;
 		env->tail = record;
 	}
@@ -640,9 +680,12 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 			record->counters.values[i] = g_envs[worker].values[i];
 	}
 
+#ifdef PROFILER_ADVANCED_MALLOC
+#else
 	// Measurement data limitation (must be after record data assignment)
 	if (env->num_time_records > num_time_records_threshold)
 		profiler_write_to_file(worker);
+#endif /*PROFILER_ADVANCED_MALLOC*/
 #endif /*PROFILER_ON*/
 }
 

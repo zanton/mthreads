@@ -107,6 +107,12 @@ static inline void myth_setup_worker(int rank)
 	//Initialize allocators
 	myth_flmalloc_init_worker(rank);
 	myth_malloc_wrapper_init_worker(rank);
+
+#ifdef PROFILER_ON
+	// Ant: [prof] initialize profiler for each thread
+	profiler_init_worker(rank);
+#endif /*PROFILER_ON*/
+
 	//Initialize logger
 	myth_log_worker_init(env);
 	myth_set_current_env(env);
@@ -376,11 +382,6 @@ static inline void *myth_worker_thread_fn(void *args)
 	cs=myth_get_worker_cpuset(rank);
 	real_pthread_setaffinity_np(real_pthread_self(),sizeof(cpu_set_t),&cs);
 #endif
-
-#ifdef PROFILER_ON
-	// Ant: [prof] initialize profiler for each thread
-	profiler_init_worker(rank);
-#endif /*PROFILER_ON*/
 
 	if (rank == 0) {
 		//setup as a main thread

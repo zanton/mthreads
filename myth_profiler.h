@@ -8,6 +8,10 @@
 #ifndef MYTH_PROFILER_H_
 #define MYTH_PROFILER_H_
 
+// Profiler config
+#define PROFILER_ON
+//#define PROFILER_ADVANCED_MALLOC
+
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILER_DEPTH_LIMIT "PROFILER_DEPTH_LIMIT"
@@ -23,7 +27,7 @@
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
-#define EACH_CORE_MEMORY_SIZE_LIMIT 100 // Megabytes
+#define EACH_CORE_MEMORY_SIZE_LIMIT 110 // Megabytes
 
 #include <stdio.h>
 #include <stdlib.h>
