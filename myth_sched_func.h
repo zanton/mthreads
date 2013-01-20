@@ -476,6 +476,11 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_create_body] set task_node for new task
 	new_thread->node = (task_node_t) profiler_create_new_node(this_thread->node, env->rank);
+
+#ifdef PROFILER_WATCH_LIMIT
+	new_thread->level = this_thread->level + 1;
+#endif /*PROFILER_WATCH_LIMIT*/
+
 #endif /*PROFILER_ON*/
 
 	// Push current thread to runqueue and switch context to new thread

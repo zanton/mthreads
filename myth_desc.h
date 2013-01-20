@@ -29,6 +29,11 @@ typedef struct myth_thread
 #ifdef PROFILER_ON
 	// Ant: [prof] [struct myth_thread] pointer to a task_node
 	task_node_t node;
+
+#ifdef PROFILER_WATCH_LIMIT
+	char level;
+#endif /*PROFILER_WATCH_LIMIT*/
+
 #endif /*PROFILER_ON*/
 
 	struct myth_thread* join_thread;//8//A thread which is waiting for this

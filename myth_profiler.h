@@ -11,6 +11,7 @@
 // Profiler config
 #define PROFILER_ON
 //#define PROFILER_ADVANCED_MALLOC
+#define PROFILER_WATCH_LIMIT
 
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"

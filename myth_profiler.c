@@ -53,6 +53,11 @@ int allocator_record_N, allocator_long_long_N;
 int * allocator_record_n, * allocator_long_long_n;
 #endif /*PROFILER_ADVANCED_MALLOC*/
 
+#ifdef PROFILER_WATCH_LIMIT
+double * under_depth_work_time;
+double * under_depth_last_time;
+#endif /*PROFILER_WATCH_LIMIT*/
+
 
 double profiler_get_curtime()
 {
@@ -285,6 +290,11 @@ void profiler_init(int worker_thread_num) {
 	profiler_num_workers = worker_thread_num;
 	profiler_malloc_init();
 
+#ifdef PROFILER_WATCH_LIMIT
+	under_depth_work_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
+	under_depth_last_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
+#endif /*PROFILER_WATCH_LIMIT*/
+
 	// Initialize overview file lock
 	overviewfile_lock = (myth_internal_lock_t *) myth_malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(overviewfile_lock);
@@ -351,6 +361,11 @@ void profiler_init_worker(int worker) {
 	// Memory allocator
 	profiler_malloc_init_worker(worker);
 
+#ifdef PROFILER_WATCH_LIMIT
+	under_depth_work_time[worker] = 0.0;
+	under_depth_last_time[worker] = 0.0; // >=0: stop time, <0: start time
+#endif /*PROFILER_WATCH_LIMIT*/
+
 	// Worker data file
 	profiler_filename = myth_malloc(30 * sizeof(char));
 	sprintf(profiler_filename, "%s%d%s", FILE_FOR_EACH_WORKER_THREAD, worker, ".txt");
@@ -394,6 +409,15 @@ void profiler_fini() {
 	for (i=0; i<CHAR_MAX; i++)
 		if (indexer[i] != 0)
 			fprintf(fp_prof_overview, "Level %d: %d task(s)\n", i, indexer[i]);
+
+#ifdef PROFILER_WATCH_LIMIT
+	// Print work time under profiler_depth_limit
+	fprintf(fp_prof_overview, "Total work time under profiler_depth_limit:\n");
+	for (i=0; i<profiler_num_workers; i++)
+		fprintf(fp_prof_overview, "Worker %d: %lf\n", i, under_depth_work_time[i]);
+	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double));
+	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double));
+#endif /*PROFILER_WATCH_LIMIT*/
 
 	// General data file
 	fclose(fp_prof_overview);
@@ -596,7 +620,19 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	if (profiler_off) return;
 
 	// Out of profiling limit
-	if (node == NULL) return;
+	if (node == NULL) {
+
+#ifdef PROFILER_WATCH_LIMIT
+		under_depth_last_time[worker] = -profiler_get_curtime();
+#endif /*PROFILER_WATCH_LIMIT*/
+
+		return;
+	}
+
+#ifdef PROFILER_WATCH_LIMIT
+	if (node->level == profiler_depth_limit)
+		under_depth_last_time[worker] = -profiler_get_curtime();
+#endif /*PROFILER_WATCH_LIMIT*/
 
 	// Create time record
 	time_record_t record = create_time_record(start_code << 1, worker, 0);
@@ -645,7 +681,28 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 	if (profiler_off) return;
 
 	// Out of profiling limit
-	if (node == NULL) return;
+	if (node == NULL) {
+
+#ifdef PROFILER_WATCH_LIMIT
+		if (under_depth_last_time[worker] < 0) {
+			double time = profiler_get_curtime();
+			under_depth_work_time[worker] += time + under_depth_last_time[worker];
+			under_depth_last_time[worker] = time;
+		}
+#endif /*PROFILER_WATCH_LIMIT*/
+
+		return;
+	}
+
+#ifdef PROFILER_WATCH_LIMIT
+	if (node->level == profiler_depth_limit) {
+		if (under_depth_last_time[worker] < 0) {
+			double time = profiler_get_curtime();
+			under_depth_work_time[worker] += time + under_depth_last_time[worker];
+			under_depth_last_time[worker] = time;
+		}
+	}
+#endif /*PROFILER_WATCH_LIMIT*/
 
 	//TODO: Must be at the begining
 	double time = profiler_get_curtime();
