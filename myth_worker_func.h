@@ -311,6 +311,7 @@ static inline void myth_startpoint_init_ex_body(int rank)
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for root task
 	this_th->node = profiler_create_root_node();
+	this_th->level = 0;
 
 	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
 	profiler_add_time_stop(this_th, env->rank, 18);
