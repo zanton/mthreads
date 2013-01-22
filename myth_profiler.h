@@ -27,7 +27,7 @@
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
-#define EACH_CORE_MEMORY_SIZE_LIMIT 100 // Megabytes
+#define EACH_CORE_MEMORY_SIZE_LIMIT 110 // Megabytes
 
 #include <stdio.h>
 #include <stdlib.h>
