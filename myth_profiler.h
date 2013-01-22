@@ -8,6 +8,10 @@
 #ifndef MYTH_PROFILER_H_
 #define MYTH_PROFILER_H_
 
+// Preprocessor directives
+#define PROFILER_ON
+#define PROFILER_WATCH_LIMIT
+
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILER_DEPTH_LIMIT "PROFILER_DEPTH_LIMIT"

@@ -225,7 +225,4 @@
 #undef MYTH_INLINE_CONTEXT
 #endif
 
-// Profiler based on task stretches
-#define PROFILER_ON
-
 #endif /* MYTH_CONFIG_H_ */
