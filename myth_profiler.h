@@ -35,7 +35,7 @@
 
 typedef struct counter_record {
 	double time;	// Time value
-	long long * values;
+	long long * values; // PAPI counter values
 } counter_record, * counter_record_t;
 
 typedef struct time_record {
@@ -43,12 +43,12 @@ typedef struct time_record {
 	int worker;		// worker thread's rank
 	counter_record counters; // counter data
 	struct time_record * next; // pointer to next time_record
-	struct task_node * node;
+	struct task_node * node; // the task that this record belongs to
 } time_record, * time_record_t;
 
 // Ant: [struct task_node] structure to save tasks' infomation
 typedef struct task_node {
-	char level; 	// task depth
+	char level; 	// task's depth level
 	int index;		// in-level index
 	int parent_index;
 	int counter; 	// number of time records pointing to it, LSB=0 -> task's running, 1 -> task ended
