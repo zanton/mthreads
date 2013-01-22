@@ -56,6 +56,8 @@ int * allocator_record_n, * allocator_long_long_n;
 #ifdef PROFILER_WATCH_LIMIT
 double * under_depth_work_time;
 double * under_depth_last_time;
+long long * under_depth_sum_value;
+long long * under_depth_last_value;
 #endif /*PROFILER_WATCH_LIMIT*/
 
 
@@ -293,6 +295,8 @@ void profiler_init(int worker_thread_num) {
 #ifdef PROFILER_WATCH_LIMIT
 	under_depth_work_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
 	under_depth_last_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
+	under_depth_sum_value = (long long *) myth_malloc(profiler_num_workers * sizeof(long long));
+	under_depth_last_value = (long long *) myth_malloc(profiler_num_workers * sizeof(long long));
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Initialize overview file lock
@@ -364,6 +368,8 @@ void profiler_init_worker(int worker) {
 #ifdef PROFILER_WATCH_LIMIT
 	under_depth_work_time[worker] = 0.0;
 	under_depth_last_time[worker] = 0.0; // >=0: stop time, <0: start time
+	under_depth_sum_value[worker] = 0;
+	under_depth_last_value[worker] = 0;
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Worker data file
@@ -414,9 +420,11 @@ void profiler_fini() {
 	// Print work time under profiler_depth_limit
 	fprintf(fp_prof_overview, "Total work time under profiler_depth_limit:\n");
 	for (i=0; i<profiler_num_workers; i++)
-		fprintf(fp_prof_overview, "Worker %d: %lf\n", i, under_depth_work_time[i]);
+	  fprintf(fp_prof_overview, "Worker %d: %lf %lld\n", i, under_depth_work_time[i], under_depth_sum_value[i]);
 	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double));
 	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double));
+	myth_free(under_depth_sum_value, profiler_num_workers * sizeof(long long));
+	myth_free(under_depth_last_value, profiler_num_workers * sizeof(long long));
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// General data file
@@ -623,15 +631,29 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 	if (node == NULL) {
 
 #ifdef PROFILER_WATCH_LIMIT
+	  // Time
 		under_depth_last_time[worker] = -profiler_get_curtime();
+		// PAPI
+		if (profiler_num_papi_events > 0) {
+		  if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+		  under_depth_last_value[worker] = g_envs[worker].values[0];
+		}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 		return;
 	}
 
 #ifdef PROFILER_WATCH_LIMIT
-	if (node->level == profiler_depth_limit)
+	if (node->level == profiler_depth_limit) {
 		under_depth_last_time[worker] = -profiler_get_curtime();
+		// PAPI
+		if (profiler_num_papi_events > 0) {
+		  if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+			PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+		  under_depth_last_value[worker] = g_envs[worker].values[0];
+		}
+	}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Create time record
@@ -688,6 +710,11 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 			double time = profiler_get_curtime();
 			under_depth_work_time[worker] += time + under_depth_last_time[worker];
 			under_depth_last_time[worker] = time;
+			if (profiler_num_papi_events > 0) {
+			  if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+			    PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+			  under_depth_sum_value[worker] = g_envs[worker].values[0] - under_depth_last_value[worker];
+			}
 		}
 #endif /*PROFILER_WATCH_LIMIT*/
 
@@ -700,6 +727,11 @@ void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
 			double time = profiler_get_curtime();
 			under_depth_work_time[worker] += time + under_depth_last_time[worker];
 			under_depth_last_time[worker] = time;
+			if (profiler_num_papi_events > 0) {
+			  if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+			    PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+			  under_depth_sum_value[worker] = g_envs[worker].values[0] - under_depth_last_value[worker];
+			}
 		}
 	}
 #endif /*PROFILER_WATCH_LIMIT*/
