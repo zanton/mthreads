@@ -313,7 +313,7 @@ static inline void myth_startpoint_init_ex_body(int rank)
 	this_th->node = profiler_create_root_node();
 
 	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
-	profiler_add_time_stop(this_th->node, env->rank, 18);
+	profiler_add_time_stop(this_th, env->rank, 18);
 #endif /*PROFILER_ON*/
 
 	//Initialize context for scheduler
@@ -350,7 +350,7 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 	while (env->rank != rank) {
 #ifdef PROFILER_ON
 		// Ant: [record time] [o19] task 0 stops to be moved to environment 0, myth_startpoint_exit_ex_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 19);
+		profiler_add_time_stop(env->this_thread, env->rank, 19);
 #endif /*PROFILER_ON*/
 
 		intptr_t rank_ = rank;
@@ -486,7 +486,7 @@ static void myth_sched_loop(void)
 
 #ifdef PROFILER_ON
 			// Ant: [record time] [s15] sched to task (run queue, I/O check, stealing), myth_sched_loop()
-			profiler_add_time_start(next_run->node, env->rank, 15);
+			profiler_add_time_start(next_run, env->rank, 15);
 #endif /*PROFILER_ON*/
 
 			myth_swap_context(&env->sched.context, &next_run->context);

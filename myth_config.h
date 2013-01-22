@@ -36,10 +36,10 @@
 #define INITIAL_QUEUE_SIZE (65536*2)
 
 //Wrap malloc function as worker-private freelist
-//#define MYTH_WRAP_MALLOC
+#define MYTH_WRAP_MALLOC
 
 //Wrap and multipelx I/O functions
-//#define MYTH_WRAP_SOCKIO
+#define MYTH_WRAP_SOCKIO
 //Quick emptiness check on io wait list
 #define QUICK_CHECK_IO_WAIT_LIST
 //Quick emptiness check on io fd list

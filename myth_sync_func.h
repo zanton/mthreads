@@ -33,7 +33,7 @@ MYTH_CTX_CALLBACK void myth_barrier_wait_1(void *arg1,void *arg2,void *arg3)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s9] waiting on barrier, task from run queue starts, myth_barrier_wait_1()
-	profiler_add_time_start(next->node, env->rank, 9);
+	profiler_add_time_start(next, env->rank, 9);
 #endif /*PROFILER_ON*/
 }
 
@@ -64,7 +64,7 @@ static inline int myth_barrier_wait_body(myth_barrier_t bar)
 	if (newval!=0){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o14] waiting on barrier, task stops, myth_barrier_wait_body()
-		profiler_add_time_stop(this_thread->node, env->rank, 14);
+		profiler_add_time_stop(this_thread, env->rank, 14);
 #endif /*PROFILER_ON*/
 
 		//This thread is not last, will be blocked
@@ -143,7 +143,7 @@ MYTH_CTX_CALLBACK void myth_jc_wait_1(void *arg1,void *arg2,void *arg3)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s10] waiting on jc, task from run queue starts, myth_jc_wait_1()
-	profiler_add_time_start(next->node, env->rank, 10);
+	profiler_add_time_start(next, env->rank, 10);
 #endif /*PROFILER_ON*/
 }
 
@@ -177,7 +177,7 @@ static inline void myth_jc_wait_body(myth_jc_t jc)
 
 #ifdef PROFILER_ON
 		// Ant: [record time] [o15] waiting on jc, task stops, myth_jc_wait_body()
-		profiler_add_time_stop(this_thread->node, env->rank, 15);
+		profiler_add_time_stop(this_thread, env->rank, 15);
 #endif /*PROFILER_ON*/
 
 		myth_internal_lock_lock(&jc->lock);
@@ -429,7 +429,7 @@ static inline int myth_felock_lock_body(myth_felock_t fe)
 	// Ant: [record time] [o16] waiting on felock, task stops, myth_felock_lock_body()
 	myth_running_env_t env;
 	env = myth_get_current_env();
-	profiler_add_time_stop(env->this_thread->node, env->rank, 16);
+	profiler_add_time_stop(env->this_thread, env->rank, 16);
 #endif /*PROFILER_ON*/
 
 	return myth_mutex_lock_body(&fe->lock);
@@ -452,7 +452,7 @@ MYTH_CTX_CALLBACK void myth_felock_wait_lock_1(void *arg1,void *arg2,void *arg3)
 #ifdef PROFILER_ON
 	// Ant: [record time] [s11] waiting on felock, task from run queue starts, myth_felock_wait_lock_1()
 	if (next)
-		profiler_add_time_start(next->node, env->rank, 11);
+		profiler_add_time_start(next, env->rank, 11);
 #endif /*PROFILER_ON*/
 }
 
@@ -463,7 +463,7 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [o16] waiting on felock, task stops, myth_felock_wait_lock_body()
-	profiler_add_time_stop(this_thread->node, e->rank, 16);
+	profiler_add_time_stop(this_thread, e->rank, 16);
 #endif /*PROFILER_ON*/
 
 	while (1){
@@ -477,7 +477,7 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 
 #ifdef PROFILER_ON
 			// Ant: [record time] [s12] felock releases, task starts, myth_felock_wait_lock_body()
-			profiler_add_time_start(this_thread->node, env->rank, 12);
+			profiler_add_time_start(this_thread, env->rank, 12);
 #endif /*PROFILER_ON*/
 
 			return 0;
@@ -542,7 +542,7 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 	}
 #ifdef PROFILER_ON
 	// Ant: [record time] [s13] felock releases, task starts, end of myth_felock_wait_lock_body()
-	profiler_add_time_start(this_thread->node, e->rank, 13);
+	profiler_add_time_start(this_thread, e->rank, 13);
 #endif /*PROFILER_ON*/
 }
 
@@ -665,7 +665,7 @@ MYTH_CTX_CALLBACK void myth_cond_wait_1(void *arg1,void *arg2,void *arg3)
 #ifdef PROFILER_ON
 	// Ant: [record time] [s14] waiting on cond, task from run queue starts, myth_cond_wait_1()
 	if (next)
-		profiler_add_time_start(next->node, env->rank, 14);
+		profiler_add_time_start(next, env->rank, 14);
 #endif /*PROFILER_ON*/
 }
 
@@ -676,7 +676,7 @@ static inline int myth_cond_wait_body(myth_cond_t cond,myth_mutex_t mtx)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [o17] waiting on cond, task stops
-	profiler_add_time_stop(this_thread->node, env->rank, 17);
+	profiler_add_time_stop(this_thread, env->rank, 17);
 #endif /*PROFILER_ON*/
 
 	//Re-allocate if waiting list is full

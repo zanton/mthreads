@@ -393,7 +393,7 @@ MYTH_CTX_CALLBACK void myth_create_1(void *arg1,void *arg2,void *arg3)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s3] new-spawned task starts, myth_create_1()
-	profiler_add_time_start(new_thread->node, env->rank, 3);
+	profiler_add_time_start(new_thread, env->rank, 3);
 #endif /*PROFILER_ON*/
 
 	new_thread->result=(*fn)(new_thread->result);
@@ -429,7 +429,7 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [o10] task ends by spawning new task, myth_create_body()
-	profiler_add_time_stop(this_thread->node, env->rank, 10);
+	profiler_add_time_stop(this_thread, env->rank, 10);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_ONE_STACK
@@ -536,7 +536,7 @@ MYTH_CTX_CALLBACK void myth_yield_1(void *arg1,void *arg2,void *arg3)
 	}
 #ifdef PROFILER_ON
 	// Ant: [record time] [s4] new-yielded task starts, myth_yield_1()
-	profiler_add_time_start(next_thread->node, env->rank, 4);
+	profiler_add_time_start(next_thread, env->rank, 4);
 #endif /*PROFILER_ON*/
 }
 
@@ -576,7 +576,7 @@ MYTH_CTX_CALLBACK void myth_yield2_1(void *arg1,void *arg2,void *arg3)
 	}
 #ifdef PROFILER_ON
 	// Ant: [record time] [s5] new-yielded2 task starts, myth_yield2_1()
-	profiler_add_time_start(next_thread->node, env->rank, 5);
+	profiler_add_time_start(next_thread, env->rank, 5);
 #endif /*PROFILER_ON*/
 }
 
@@ -591,7 +591,7 @@ static inline void myth_yield2_body(void)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [o11] task stops by yield2ing other task, myth_yield2_body()
-	profiler_add_time_stop(th->node, env->rank, 11);
+	profiler_add_time_stop(th, env->rank, 11);
 #endif /*PROFILER_ON*/
 
 	//Get next runnable thread
@@ -613,7 +613,7 @@ static inline void myth_join_1(myth_running_env_t e,myth_thread_t th,void **resu
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s6] joining finishes, the same task restarts, myth_join_1()
-	profiler_add_time_start(e->this_thread->node, e->rank, 6);
+	profiler_add_time_start(e->this_thread, e->rank, 6);
 #endif /*PROFILER_ON*/
 }
 
@@ -630,7 +630,7 @@ MYTH_CTX_CALLBACK void myth_join_2(void *arg1,void *arg2,void *arg3)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s7] waiting on joining, new task from run queue starts, myth_join_2()
-	profiler_add_time_start(next_thread->node, env->rank, 7);
+	profiler_add_time_start(next_thread, env->rank, 7);
 #endif /*PROFILER_ON*/
 }
 
@@ -670,7 +670,7 @@ static inline void myth_join_body(myth_thread_t th,void **result)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [o12] waiting for joining, task stops, myth_join_body()
-	profiler_add_time_stop(this_thread->node, env->rank, 12);
+	profiler_add_time_stop(this_thread, env->rank, 12);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_JOIN_DEBUG
@@ -874,7 +874,7 @@ MYTH_CTX_CALLBACK void myth_entry_point_1(void *arg1,void *arg2,void *arg3)
 
 #ifdef PROFILER_ON
 	// Ant: [record time] [s8] task ends, waiting task/run-queue task starts, myth_entry_point_1()
-	profiler_add_time_start(next_thread->node, env->rank, 8);
+	profiler_add_time_start(next_thread, env->rank, 8);
 #endif /*PROFILER_ON*/
 }
 
@@ -926,7 +926,7 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 {
 #ifdef PROFILER_ON
 	// Ant: [record time] [o13] task ends, myth_entry_point_cleanup()
-	profiler_add_time_stop(this_thread->node, this_thread->env->rank, 13);
+	profiler_add_time_stop(this_thread, this_thread->env->rank, 13);
 	profiler_mark_delete_task_node(this_thread->node);
 	//profiler_output_task_data(this_thread->node);
 #endif /*PROFILER_ON*/

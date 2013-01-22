@@ -35,6 +35,7 @@
 #include <papi.h>
 #include <limits.h>
 #include "myth_misc.h"
+//#include "myth_desc.h"
 
 
 typedef struct counter_record {
@@ -66,8 +67,8 @@ void		profiler_init_worker(int rank);
 void		profiler_fini_worker(int rank);
 void 		profiler_fini();
 task_node_t profiler_create_new_node(task_node_t parent, int worker);
-void 		profiler_add_time_start(task_node_t node, int worker, int start_code);
-void 		profiler_add_time_stop(task_node_t node, int worker, int stop_code);
+void 		profiler_add_time_start(void * thread, int worker, int start_code);
+void 		profiler_add_time_stop(void * thread, int worker, int stop_code);
 task_node_t profiler_create_root_node();
 void		profiler_mark_delete_task_node(task_node_t node);
 void		profiler_write_to_file(int worker);

@@ -164,7 +164,7 @@ static inline void myth_wait_for_read(int fd,myth_running_env_t env,myth_io_op_t
 
 #ifdef PROFILER_ON
 		// Ant: [record time] [s1] waiting on READ I/O, task from run queue starts
-		profiler_add_time_start(next->node, env->rank, 1);
+		profiler_add_time_start(next, env->rank, 1);
 #endif /*PROFILER_ON*/
 
 		myth_swap_context_withcall(&this_thread->context,&next->context,
@@ -227,7 +227,7 @@ static inline void myth_wait_for_write(int fd,myth_running_env_t env,myth_io_op_
 
 #ifdef PROFILER_ON
 		// Ant: [record time] [s2] waiting on WRITE I/O, task from run queue starts
-		profiler_add_time_start(next->node, env->rank, 2);
+		profiler_add_time_start(next, env->rank, 2);
 #endif /*PROFILER_ON*/
 
 		myth_swap_context_withcall(&this_thread->context,&next->context,
@@ -363,7 +363,7 @@ static inline int myth_accept_body (int fd, struct sockaddr* addr,
 	if (sock==-1){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o4] task stops to wait for READ I/O, myth_accept_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 4);
+		profiler_add_time_stop(env->this_thread, env->rank, 4);
 #endif /*PROFILER_ON*/
 
 		myth_io_op op;
@@ -426,7 +426,7 @@ static inline int myth_select_body(int nfds, fd_set *readfds, fd_set *writefds,
 		// Ant: [record time] [o5] myth_select_body(), task stops
 		myth_running_env_t env;
 		env = myth_get_current_env();
-		profiler_add_time_stop(env->this_thread->node, env->rank, 5);
+		profiler_add_time_stop(env->this_thread, env->rank, 5);
 #endif /*PROFILER_ON*/
 
 #ifdef SELECT_ALWAYS_RETURN_IMMEDIATELY
@@ -473,7 +473,7 @@ static inline ssize_t myth_sendto_body(int sockfd, const void *buf, size_t len, 
 	if (ret==-1){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o6] task stops to wait for WRITE I/O, myth_sendto_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 6);
+		profiler_add_time_stop(env->this_thread, env->rank, 6);
 #endif /*PROFILER_ON*/
 
 		myth_io_op op;
@@ -533,7 +533,7 @@ static inline ssize_t myth_recvfrom_body(int sockfd, void *buf, size_t len, int 
 	if (ret==-1){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o7] task stops to wait for READ I/O, myth_recvfrom_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 7);
+		profiler_add_time_stop(env->this_thread, env->rank, 7);
 #endif /*PROFILER_ON*/
 
 		myth_io_op op;
@@ -592,7 +592,7 @@ static inline ssize_t myth_send_body (int fd, const void *buf, size_t n, int fla
 	if (ret==-1){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o8] task stops to wait for WRITE I/O, myth_send_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 8);
+		profiler_add_time_stop(env->this_thread, env->rank, 8);
 #endif /*PROFILER_ON*/
 
 		myth_io_op op;
@@ -649,7 +649,7 @@ static inline ssize_t myth_recv_body (int fd, void *buf, size_t n, int flags)
 	if (ret==-1){
 #ifdef PROFILER_ON
 		// Ant: [record time] [o9] task stops to wait for READ I/O, myth_recv_body()
-		profiler_add_time_stop(env->this_thread->node, env->rank, 9);
+		profiler_add_time_stop(env->this_thread, env->rank, 9);
 #endif /*PROFILER_ON*/
 
 		myth_io_op op;

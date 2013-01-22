@@ -24,7 +24,7 @@ int sched_yield(void)
 	// Ant: [record time] [o2] task stops by sched_yield()
 	myth_running_env_t env;
 	env = myth_get_current_env();
-	profiler_add_time_stop(env->this_thread->node, env->rank, 2);
+	profiler_add_time_stop(env->this_thread, env->rank, 2);
 #endif /*PROFILER_ON*/
 
 	real_sched_yield();
@@ -176,7 +176,7 @@ int pthread_mutex_lock (pthread_mutex_t *mutex)
 	// Ant: [record time] [o3] task stops by pthread_mutex_lock()
 	myth_running_env_t env;
 	env = myth_get_current_env();
-	profiler_add_time_stop(env->this_thread->node, env->rank, 3);
+	profiler_add_time_stop(env->this_thread, env->rank, 3);
 #endif /*PROFILER_ON*/
 
 	handle_mutex_initializer(mutex);

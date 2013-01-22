@@ -580,10 +580,13 @@ time_record_t create_time_record(int type, int worker, double time) {
 #endif /*PROFILER_ON*/
 }
 
-void profiler_add_time_start(task_node_t node, int worker, int start_code) {
+void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 #ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return;
+
+	myth_thread_t thread = (myth_thread_t) thread_t;
+	task_node_t node = thread->node;
 
 	// Out of profiling limit
 	if (node == NULL) {
@@ -637,9 +640,12 @@ void profiler_add_time_start(task_node_t node, int worker, int start_code) {
 		profiler_write_to_file(worker);
 }
 
-void profiler_add_time_stop(task_node_t node, int worker, int stop_code) {
+void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	// PROFILER OFF
 	if (profiler_off) return;
+
+	myth_thread_t thread = (myth_thread_t) thread_t;
+	task_node_t node = thread->node;
 
 	// Out of profiling limit
 	if (node == NULL) {

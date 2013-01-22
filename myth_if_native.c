@@ -99,7 +99,7 @@ void myth_yield(void)
 	// Ant: [record time] [o1] task stops by myth_yield()
 	myth_running_env_t env;
 	env = myth_get_current_env();
-	profiler_add_time_stop(env->this_thread->node, env->rank, 1);
+	profiler_add_time_stop(env->this_thread, env->rank, 1);
 #endif /*PROFILER_ON*/
 
 	myth_yield_body();
