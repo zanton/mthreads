@@ -19,6 +19,8 @@ int profiler_num_workers = 0;	// number of workers
 //task_node_t root_node = NULL;	//TODO: linked list of all task nodes?
 myth_internal_lock_t * overviewfile_lock;
 FILE * fp_prof_overview;
+double profiler_program_start_time = 0;
+double profiler_program_stop_time = 0;
 
 // Environment variables
 char profiler_off = 0;				// To turn profiler off; on by default
@@ -220,6 +222,12 @@ void profiler_init(int worker_thread_num) {
 	// Get enviroment variable
 	char * env_var;
 
+	// Get program start time
+	profiler_program_start_time = profiler_get_curtime();
+
+	// Open overview data file
+	fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
+
 	// PROFILER_OFF environment variable
 	env_var = getenv(ENV_PROFILER_OFF);
 	if (env_var)
@@ -312,23 +320,22 @@ void profiler_init(int worker_thread_num) {
 			if ((profiler_retval = PAPI_event_name_to_code(papi_event_names[i], &papi_event_codes[i])) != PAPI_OK)
 				PAPI_fail(__FILE__, __LINE__, "PAPI_event_name_to_code", profiler_retval);
 		}
-
-		// Open overview data file
-		fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
-		fprintf(fp_prof_overview, "Overview profile data\n");
-		fprintf(fp_prof_overview, "profiler_off = %d\n", profiler_off);
-		fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
-		fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
-		fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
-		fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
-		fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
-		fprintf(fp_prof_overview, "profiler_watch_from = %d\n", profiler_watch_from);
-		fprintf(fp_prof_overview, "profiler_watch_mode = %d\n", profiler_watch_mode);
-		for (i=0; i<profiler_num_papi_events; i++) {
-			fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
-		}
-		//fclose(fp_prof_overview);
 	}
+
+	// Open overview data file
+	fprintf(fp_prof_overview, "Overview profile data\n");
+	fprintf(fp_prof_overview, "profiler_off = %d\n", profiler_off);
+	fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
+	fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
+	fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
+	fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
+	fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
+	fprintf(fp_prof_overview, "profiler_watch_from = %d\n", profiler_watch_from);
+	fprintf(fp_prof_overview, "profiler_watch_mode = %d\n", profiler_watch_mode);
+	for (i=0; i<profiler_num_papi_events; i++) {
+		fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
+	}
+	//fclose(fp_prof_overview);
 #endif /*PROFILER_ON*/
 }
 
@@ -386,7 +393,14 @@ void profiler_init_worker(int worker) {
 void profiler_fini() {
 #ifdef PROFILER_ON
 	// PROFILER OFF
-	if (profiler_off) return ;
+	if (profiler_off) {
+		// Program execution time
+		fprintf(fp_prof_overview, "Program execution time: %lf\n%lf\n%lf\n", profiler_program_stop_time-profiler_program_start_time, profiler_program_start_time, profiler_program_stop_time);
+		// General data file
+		fclose(fp_prof_overview);
+
+		return ;
+	}
 
 	// Destroy indexer_locks
 	int i;
@@ -410,6 +424,9 @@ void profiler_fini() {
 	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double));
 #endif /*PROFILER_WATCH_LIMIT*/
 
+	// Program execution time
+	fprintf(fp_prof_overview, "Program execution time: %lf\n%lf\n%lf\n", profiler_program_stop_time-profiler_program_start_time, profiler_program_start_time, profiler_program_stop_time);
+
 	// General data file
 	fclose(fp_prof_overview);
 #endif /*PROFILER_ON*/
@@ -417,6 +434,10 @@ void profiler_fini() {
 
 void profiler_fini_worker(int worker) {
 #ifdef PROFILER_ON
+	// Get program stop time
+	if (profiler_program_stop_time == 0)
+		profiler_program_stop_time = profiler_get_curtime();
+
 	// PROFILER OFF
 	if (profiler_off) return;
 
@@ -671,6 +692,10 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 }
 
 void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
+	// Get program stop time
+	if (stop_code == 19)
+		profiler_program_stop_time = profiler_get_curtime();
+
 	// PROFILER OFF
 	if (profiler_off) return;
 
