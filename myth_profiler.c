@@ -26,6 +26,7 @@ char profiler_depth_limit = CHAR_MAX;	// Profiling depth limit, CHAR_MAX (127) m
 char profiler_num_papi_events = 0;
 int profiler_mem_size_limit;
 char profiler_watch_from;
+char profiler_watch_mode = 0;
 
 // PAPI Events
 int papi_event_codes[MAX_NUM_PAPI_EVENTS];
@@ -77,7 +78,7 @@ void PAPI_fail(char *file, int line, char *call, int retval)
         //PAPI_perror(retval, errstring, PAPI_MAX_STR_LEN );
         //printf("Error in %s: %s\n", call, errstring );
     	// PAPI 5.0.1
-    	fprintf(stderr, "Error in %s\n", call);
+    	fprintf(stderr, "Error in %s\nretval=%d\n", call, retval);
     	PAPI_perror(PAPI_strerror(retval));
     }
     fprintf(stderr, "\n");
@@ -237,21 +238,6 @@ void profiler_init(int worker_thread_num) {
 		profiler_num_papi_events = atoi(env_var);
 	}
 
-	// PROFILER_PAPI_EVENT_x environment variables
-	int i, retvall;
-	char name[MAX_PAPI_EVENT_NAME_LENGTH];
-	for (i=0; i<profiler_num_papi_events; i++) {
-		sprintf(name, "%s%d", ENV_PROFILER_PAPI_EVENT_NAME, i+1);
-		papi_event_names[i] = getenv(name);
-		if (papi_event_names[i] == NULL) {
-			papi_event_names[i] = default_papi_event_names[i];
-			papi_event_codes[i] = default_papi_event_codes[i];
-		} else {
-			if ((retvall = PAPI_event_name_to_code(papi_event_names[i], &papi_event_codes[i])) != PAPI_OK)
-				PAPI_fail(__FILE__, __LINE__, "PAPI_event_name_to_code", retvall);
-		}
-	}
-
 	// PROFILER_MEM_SIZE_LIMIT environment variable
 	env_var = getenv(ENV_PROFILER_MEM_SIZE_LIMIT);
 	if (env_var) {
@@ -266,6 +252,12 @@ void profiler_init(int worker_thread_num) {
 		profiler_watch_from = atoi(env_var);
 	} else {
 		profiler_watch_from = profiler_depth_limit + 1;
+	}
+
+	// PROFILER_WATCH_MODE environment variable
+	env_var = getenv(ENV_PROFILER_WATCH_MODE);
+	if (env_var) {
+			profiler_watch_mode = atoi(env_var);
 	}
 
 	// General initialization
@@ -295,20 +287,6 @@ void profiler_init(int worker_thread_num) {
 	// Make prof folder
 	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
 
-	// Open overview data file
-	fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
-	fprintf(fp_prof_overview, "Overview profile data\n");
-	fprintf(fp_prof_overview, "profiler_off = %d\n", profiler_off);
-	fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
-	fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
-	fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
-	fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
-	fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
-	for (i=0; i<profiler_num_papi_events; i++) {
-		fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
-	}
-	//fclose(fp_prof_overview);
-
 	// PAPI
 	// Initialize PAPI library
 	if (profiler_num_papi_events > 0) {
@@ -319,6 +297,37 @@ void profiler_init(int worker_thread_num) {
 		profiler_retval = PAPI_thread_init( (unsigned long (*) (void)) real_pthread_self);
 		if (profiler_retval != PAPI_OK)
 			PAPI_fail(__FILE__, __LINE__, "PAPI_thread_init", profiler_retval);
+	}
+
+	// PROFILER_PAPI_EVENT_x environment variables
+	int i;
+	char name[MAX_PAPI_EVENT_NAME_LENGTH];
+	for (i=0; i<profiler_num_papi_events; i++) {
+		sprintf(name, "%s%d", ENV_PROFILER_PAPI_EVENT_NAME, i+1);
+		papi_event_names[i] = getenv(name);
+		if (papi_event_names[i] == NULL) {
+			papi_event_names[i] = default_papi_event_names[i];
+			papi_event_codes[i] = default_papi_event_codes[i];
+		} else {
+			if ((profiler_retval = PAPI_event_name_to_code(papi_event_names[i], &papi_event_codes[i])) != PAPI_OK)
+				PAPI_fail(__FILE__, __LINE__, "PAPI_event_name_to_code", profiler_retval);
+		}
+
+		// Open overview data file
+		fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
+		fprintf(fp_prof_overview, "Overview profile data\n");
+		fprintf(fp_prof_overview, "profiler_off = %d\n", profiler_off);
+		fprintf(fp_prof_overview, "profiler_num_workers = %d\n", profiler_num_workers);
+		fprintf(fp_prof_overview, "profiler_mem_size_limit (for each core) = %d MB\n", profiler_mem_size_limit);
+		fprintf(fp_prof_overview, "num_time_records_threshold = %d\n", num_time_records_threshold);
+		fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
+		fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
+		fprintf(fp_prof_overview, "profiler_watch_from = %d\n", profiler_watch_from);
+		fprintf(fp_prof_overview, "profiler_watch_mode = %d\n", profiler_watch_mode);
+		for (i=0; i<profiler_num_papi_events; i++) {
+			fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
+		}
+		//fclose(fp_prof_overview);
 	}
 #endif /*PROFILER_ON*/
 }
@@ -605,17 +614,24 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 	if (node == NULL) {
 
 #ifdef PROFILER_WATCH_LIMIT
-		if (thread->level >= profiler_watch_from)
-			under_depth_last_time[worker] = -profiler_get_curtime();
+		if (thread->level >= profiler_watch_from) {
+			switch (profiler_watch_mode) {
+			case 0: // watch time
+				under_depth_last_time[worker] = -profiler_get_curtime();
+				break;
+			case 1: // watch hardware counter by PAPI
+				if (profiler_num_papi_events > 0) {
+					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+						PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+					under_depth_last_time[worker] = -g_envs[worker].values[0];
+				}
+				break;
+			}
+		}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 		return;
 	}
-
-#ifdef PROFILER_WATCH_LIMIT
-	//if (node->level == profiler_depth_limit)
-		//under_depth_last_time[worker] = -profiler_get_curtime();
-#endif /*PROFILER_WATCH_LIMIT*/
 
 	// Create time record
 	time_record_t record = create_time_record(start_code << 1, worker, 0);
@@ -666,26 +682,28 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 
 #ifdef PROFILER_WATCH_LIMIT
 		if (thread->level >= profiler_watch_from) {
-			if (under_depth_last_time[worker] < 0) {
-				double time = profiler_get_curtime();
-				under_depth_work_time[worker] += time + under_depth_last_time[worker];
-				under_depth_last_time[worker] = time;
+			switch (profiler_watch_mode) {
+			case 0:
+				if (under_depth_last_time[worker] < 0) {
+					double time = profiler_get_curtime();
+					under_depth_work_time[worker] += time + under_depth_last_time[worker];
+					under_depth_last_time[worker] = time;
+				}
+				break;
+			case 1:
+				if (profiler_num_papi_events > 0 && under_depth_last_time[worker] < 0) {
+					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+						PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+					under_depth_work_time[worker] += g_envs[worker].values[0] + under_depth_last_time[worker];
+					under_depth_last_time[worker] = g_envs[worker].values[0];
+				}
+				break;
 			}
 		}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 		return;
 	}
-
-#ifdef PROFILER_WATCH_LIMIT
-	//if (node->level == profiler_depth_limit) {
-		//if (under_depth_last_time[worker] < 0) {
-			//double time = profiler_get_curtime();
-			//under_depth_work_time[worker] += time + under_depth_last_time[worker];
-			//under_depth_last_time[worker] = time;
-		//}
-	//}
-#endif /*PROFILER_WATCH_LIMIT*/
 
 	//TODO: Must be at the begining
 	double time = profiler_get_curtime();
