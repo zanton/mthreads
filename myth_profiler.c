@@ -260,6 +260,8 @@ void profiler_init(int worker_thread_num) {
 		profiler_watch_from = atoi(env_var);
 	} else {
 		profiler_watch_from = profiler_depth_limit + 1;
+		if (profiler_watch_from < 0)
+		  profiler_watch_from = 127;
 	}
 
 	// PROFILER_WATCH_MODE environment variable
