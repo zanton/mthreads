@@ -20,6 +20,7 @@
 #define ENV_PROFILER_MEM_SIZE_LIMIT "PROFILER_MEM_SIZE_LIMIT"
 #define ENV_PROFILER_WATCH_FROM "PROFILER_WATCH_FROM"
 #define ENV_PROFILER_WATCH_MODE "PROFILER_WATCH_MODE"
+#define ENV_PROFILER_WATCH_TO "PROFILER_WATCH_TO"
 
 #define MAX_NUM_PAPI_EVENTS 4
 #define MAX_PAPI_EVENT_NAME_LENGTH 22
@@ -29,7 +30,7 @@
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
-#define EACH_CORE_MEMORY_SIZE_LIMIT 110 // Megabytes
+#define EACH_CORE_MEMORY_SIZE_LIMIT 300 // Megabytes
 
 #include <stdio.h>
 #include <stdlib.h>

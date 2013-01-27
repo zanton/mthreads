@@ -29,6 +29,7 @@ char profiler_num_papi_events = 0;
 int profiler_mem_size_limit;
 char profiler_watch_from;
 char profiler_watch_mode = 0;
+char profiler_watch_to;
 
 // PAPI Events
 int papi_event_codes[MAX_NUM_PAPI_EVENTS];
@@ -270,6 +271,14 @@ void profiler_init(int worker_thread_num) {
 			profiler_watch_mode = atoi(env_var);
 	}
 
+	// PROFILER_WATCH_TO environment variable
+	env_var = getenv(ENV_PROFILER_WATCH_TO);
+	if (env_var) {
+		profiler_watch_to = atoi(env_var);
+	} else {
+		profiler_watch_to = 127;
+	}
+
 	// General initialization
 	profiler_num_workers = worker_thread_num;
 	init_memory_allocator();
@@ -333,6 +342,7 @@ void profiler_init(int worker_thread_num) {
 	fprintf(fp_prof_overview, "profiler_depth_limit = %d\n", profiler_depth_limit);
 	fprintf(fp_prof_overview, "profiler_num_papi_events = %d\n", profiler_num_papi_events);
 	fprintf(fp_prof_overview, "profiler_watch_from = %d\n", profiler_watch_from);
+	fprintf(fp_prof_overview, "profiler_watch_to = %d\n", profiler_watch_to);
 	fprintf(fp_prof_overview, "profiler_watch_mode = %d\n", profiler_watch_mode);
 	for (i=0; i<profiler_num_papi_events; i++) {
 		fprintf(fp_prof_overview, "%s\n", papi_event_names[i]);
@@ -419,7 +429,7 @@ void profiler_fini() {
 
 #ifdef PROFILER_WATCH_LIMIT
 	// Print work time under profiler_depth_limit
-	fprintf(fp_prof_overview, "Total work time under profiler_depth_limit:\n");
+	fprintf(fp_prof_overview, "Total work time from level %d to level %d:\n", profiler_watch_from, profiler_watch_to);
 	for (i=0; i<profiler_num_workers; i++)
 		fprintf(fp_prof_overview, "Worker %d: %lf\n", i, under_depth_work_time[i]);
 	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double));
@@ -637,7 +647,7 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 	if (node == NULL) {
 
 #ifdef PROFILER_WATCH_LIMIT
-		if (thread->level >= profiler_watch_from) {
+		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
 			switch (profiler_watch_mode) {
 			case 0: // watch time
 				under_depth_last_time[worker] = -profiler_get_curtime();
@@ -708,7 +718,7 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	if (node == NULL) {
 
 #ifdef PROFILER_WATCH_LIMIT
-		if (thread->level >= profiler_watch_from) {
+		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
 			switch (profiler_watch_mode) {
 			case 0:
 				if (under_depth_last_time[worker] < 0) {
