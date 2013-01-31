@@ -60,7 +60,7 @@ double profiler_get_curtime()
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1.0E+3 + tv.tv_usec * 1.0E-3;
+	return tv.tv_sec + tv.tv_usec * 1.0E-6;
 }
 
 void PAPI_fail(char *file, int line, char *call, int retval)
@@ -573,7 +573,7 @@ void profiler_write_to_file(int worker) {
 	while (t != NULL) {
 		tt = t->next;
 		fprintf(fp, "%d, %d, %d, ", t->node->level, t->node->index, t->node->parent_index);
-		fprintf(fp, "%d, %d, %lf, ", t->type, t->worker, t->counters.time);
+		fprintf(fp, "%d, %d, %0.9lf, ", t->type, t->worker, t->counters.time);
 		int i;
 		for (i=0; i<profiler_num_papi_events; i++) {
 			fprintf(fp, "%lld", t->counters.values[i]);
