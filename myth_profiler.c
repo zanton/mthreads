@@ -431,13 +431,13 @@ void profiler_fini() {
 	// Print work time under profiler_depth_limit
 	fprintf(fp_prof_overview, "Total work time from level %d to level %d:\n", profiler_watch_from, profiler_watch_to);
 	for (i=0; i<profiler_num_workers; i++)
-		fprintf(fp_prof_overview, "Worker %d: %lf\n", i, under_depth_work_time[i]);
+		fprintf(fp_prof_overview, "Worker %d: %0.9lf\n", i, under_depth_work_time[i]);
 	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double));
 	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double));
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Program execution time
-	fprintf(fp_prof_overview, "Program execution time: %lf\n%lf\n%lf\n", profiler_program_stop_time-profiler_program_start_time, profiler_program_start_time, profiler_program_stop_time);
+	fprintf(fp_prof_overview, "Program execution time: %0.9lf\n%0.9lf\n%0.9lf\n", profiler_program_stop_time-profiler_program_start_time, profiler_program_start_time, profiler_program_stop_time);
 
 	// General data file
 	fclose(fp_prof_overview);
@@ -573,15 +573,12 @@ void profiler_write_to_file(int worker) {
 	while (t != NULL) {
 		tt = t->next;
 		fprintf(fp, "%d, %d, %d, ", t->node->level, t->node->index, t->node->parent_index);
-		fprintf(fp, "%d, %d, %0.9lf, ", t->type, t->worker, t->counters.time);
+		fprintf(fp, "%d, %d, %0.9lf", t->type, t->worker, t->counters.time);
 		int i;
 		for (i=0; i<profiler_num_papi_events; i++) {
-			fprintf(fp, "%lld", t->counters.values[i]);
-			if (i == profiler_num_papi_events-1)
-				fprintf(fp, "\n");
-			else
-				fprintf(fp, ", ");
+			fprintf(fp, ", %lld", t->counters.values[i]);
 		}
+		fprintf(fp, "\n");
 		t->node->counter -= 2;
 		if (t->node->counter == 1) {
 			profiler_delete_task_node(t->node);
