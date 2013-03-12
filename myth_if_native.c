@@ -15,7 +15,11 @@
 
 void myth_init(void)
 {
-	myth_init_body();
+	myth_init_body(0,0);
+}
+void myth_init_withparam(int worker_num,size_t def_stack_size)
+{
+	myth_init_body(worker_num,def_stack_size);
 }
 void myth_fini(void)
 {
@@ -23,9 +27,9 @@ void myth_fini(void)
 }
 
 //alternative init/fini
-int myth_init_ex(int worker_num)
+int myth_init_ex(int worker_num,size_t def_stack_size)
 {
-	return myth_init_ex_body(worker_num);
+	return myth_init_ex_body(worker_num,def_stack_size);
 }
 
 void myth_fini_ex(void)
@@ -80,7 +84,7 @@ myth_thread_t myth_create(myth_func_t func,void *arg)
 
 myth_thread_t myth_create_ex(myth_func_t func,void *arg,myth_thread_option_t opt)
 {
-	return myth_create_body(func,arg,opt->stack_size);
+	return myth_create_ex_body(func,arg,opt);
 }
 
 void myth_exit(void *ret)
@@ -93,7 +97,7 @@ void myth_detach(myth_thread_t th)
 	myth_detach_body(th);
 }
 
-void myth_yield(void)
+void myth_yield(int force_worksteal)
 {
 #ifdef PROFILER_ON
 	// Ant: [record time] [o1] task stops by myth_yield()
@@ -102,7 +106,7 @@ void myth_yield(void)
 	profiler_add_time_stop(env->this_thread, env->rank, 1);
 #endif /*PROFILER_ON*/
 
-	myth_yield_body();
+	myth_yield_body(force_worksteal);
 }
 void myth_yield2(void)
 {
@@ -282,6 +286,98 @@ int myth_felock_status(myth_felock_t fe)
 int myth_felock_set_unlock(myth_felock_t fe,int val)
 {
 	return myth_felock_set_unlock_body(fe,val);
+}
+
+myth_mutex_t myth_mutex_create(void)
+{
+	return myth_mutex_create_body();
+}
+
+void myth_mutex_destroy(myth_mutex_t mtx)
+{
+	myth_mutex_destroy_body(mtx);
+}
+
+int myth_mutex_trylock(myth_mutex_t mtx)
+{
+	return myth_mutex_trylock_body(mtx);
+}
+
+void myth_mutex_lock(myth_mutex_t mtx)
+{
+	myth_mutex_lock_body(mtx);
+}
+
+void myth_mutex_unlock(myth_mutex_t mtx)
+{
+	myth_mutex_unlock_body(mtx);
+}
+
+myth_cond_t myth_cond_create(void)
+{
+	return myth_cond_create_body();
+}
+
+void myth_cond_destroy(myth_cond_t c)
+{
+	myth_cond_destroy_body(c);
+}
+
+void myth_cond_signal(myth_cond_t c)
+{
+	myth_cond_signal_body(c);
+}
+
+void myth_cond_broadcast(myth_cond_t c)
+{
+	myth_cond_broadcast_body(c);
+}
+
+void myth_cond_wait (myth_cond_t c,myth_mutex_t mtx)
+{
+	myth_cond_wait_body(c,mtx);
+}
+
+myth_thread_t myth_schedapi_runqueue_take(int victim)
+{
+	return myth_queue_take(&g_envs[victim].runnable_q);
+}
+
+myth_thread_t myth_schedapi_runqueue_peek(int victim)
+{
+	return myth_queue_peek(&g_envs[victim].runnable_q);
+}
+
+int myth_schedapi_runqueue_pass(int target,myth_thread_t th)
+{
+	//fprintf(stderr,"pass %d %p\n",target,th);
+	return myth_queue_trypass(&g_envs[target].runnable_q,th);
+}
+
+void myth_schedapi_runqueue_push(myth_thread_t th)
+{
+	myth_running_env_t env=myth_get_current_env();
+	myth_queue_push(&env->runnable_q,th);
+}
+
+myth_thread_t myth_schedapi_runqueue_pop(void)
+{
+	myth_running_env_t env=myth_get_current_env();
+	return myth_queue_pop(&env->runnable_q);
+}
+
+int myth_schedapi_rand(void)
+{
+	myth_running_env_t env,busy_env;
+	//Choose a worker thread that seems to be busy
+	env=myth_get_current_env();
+	busy_env=myth_env_get_first_busy(env);
+	return busy_env->rank;
+}
+
+int myth_schedapi_rand2(int min,int max)
+{
+	return myth_random(min,max);
 }
 
 //TODO: temporalily disable

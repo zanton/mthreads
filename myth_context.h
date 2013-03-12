@@ -18,9 +18,20 @@ typedef void (*void_func_t)(void);
 #define MYTH_CONTEXT_ARCH_amd64
 #elif defined MYTH_ARCH_sparc && !defined MYTH_FORCE_UCONTEXT
 #define MYTH_CONTEXT_ARCH_sparc
+  #ifdef MYTH_ARCH_sparc_v9
+  #define FRAMESIZE 176   /* Keep consistent with myth_context.S */
+  #define STACKBIAS 2047  /* Do not change this */
+  #define SAVE_FP   128
+  #define SAVE_I7   136
+  #else
+  #define FRAMESIZE 92
+  #define SAVE_FP   68
+  #define SAVE_I7   72
+  #endif
 #elif defined MYTH_ARCH_UNIVERSAL || defined MYTH_FORCE_UCONTEXT
 #define MYTH_CONTEXT_ARCH_UNIVERSAL
 #undef MYTH_INLINE_CONTEXT
+#define MYTH_CONTEXT_ARCH_UNIVERSAL
 #else
 #error "Specify architecture"
 #endif
@@ -33,7 +44,11 @@ typedef void (*void_func_t)(void);
 #define MYTH_CTX_CALLBACK static __attribute__((used,noinline,sysv_abi))
 #define USE_AVOID_OPTIMIZE
 //#define MYTH_CTX_CALLBACK static __attribute((used,noinline))
-#else
+#elif defined MYTH_CONTEXT_ARCH_sparc
+#include <string.h>
+#include <ucontext.h>
+#define MYTH_CTX_CALLBACK static __attribute__((used,noinline))
+#elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
 #include <string.h>
 #include <ucontext.h>
 #define MYTH_CTX_CALLBACK static __attribute__((used,noinline))
@@ -46,9 +61,14 @@ typedef struct myth_context
 	uint32_t esp;
 #elif defined MYTH_CONTEXT_ARCH_amd64
 	uint64_t rsp;
-#elif defined MYTH_CONTEXT_ARCH_sparc 
+#elif defined MYTH_CONTEXT_ARCH_sparc
+#ifdef MYTH_ARCH_sparc_v9
+  uint64_t sp;
+#else
+  uint32_t sp;
+#endif
 #elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
-  ucontext_t uc;
+	ucontext_t uc;
 #else
 #error "Architecture not defined"
 #endif
@@ -68,44 +88,30 @@ static inline void myth_make_context_voidcall(myth_context_t ctx, void_func_t fu
 	myth_log_add_context_switch(env, th); \
 }
 #else
-
-//#define myth_context_switch_hook(ctx)
-// Antx: define myth_context_switch_hook_swap
-/*static void myth_context_switch_hook_swap(myth_context_t from, myth_context_t to)
-{
-	//profiler_add_time_record_wthread(from->node, 1, from->thread);
-	//profiler_add_time_record_wthread(to->node, 0, to->thread);
-}
-// Antx: define myth_context_switch_hook_set
-static void myth_context_switch_hook_set(myth_context_t ctx)
-{
-	//profiler_add_time_record_wthread(ctx->node, 0, ctx->thread);
-}*/
-
+#define myth_context_switch_hook(ctx)
 #endif
 
 #if defined MYTH_CONTEXT_ARCH_i386 || defined MYTH_CONTEXT_ARCH_amd64 || \
     defined MYTH_CONTEXT_ARCH_sparc
-
 void myth_swap_context_s(myth_context_t switch_from, myth_context_t switch_to);
 void myth_swap_context_withcall_s(myth_context_t switch_from, myth_context_t switch_to,
   void(*func)(void*,void*,void*), void *arg1, void *arg2, void *arg3);
-void myth_get_context_s(myth_context_t ctx);
 void myth_set_context_s(myth_context_t ctx);
 void myth_set_context_withcall_s(myth_context_t switch_to, 
   void(*func)(void*,void*,void*), void *arg1, void *arg2, void *arg3);
-
 #elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
 
 #ifdef MYTH_ARCH_sparc
-#if __WORDSIZE == 32
-#define PRESERVE_G7(ctx) asm volatile("st %%g7,[%0]" \
-	:: "r"(&ctx->uc.uc_mcontext.gregs[REG_G7]) : "memory")
-#else /* __WORDSIZE == 64 */
-#define PRESERVE_G7(ctx) asm volatile("stx %%g7,[%0]" \
+#ifdef MYTH_ARCH_sparc_v9
+#define PRESERVE_TLSREG(ctx) asm volatile("stx %%g7,[%0]" \
 	:: "r"(&ctx->uc.uc_mcontext.mc_gregs[MC_G7]) : "memory")
-#endif /* __WORDISZE == 64 */
-#endif /* MYTH_ARCH_sparc */
+#else
+#define PRESERVE_TLSREG(ctx) asm volatile("st %%g7,[%0]" \
+	:: "r"(&ctx->uc.uc_mcontext.gregs[REG_G7]) : "memory")
+#endif
+#else /* MYTH_ARCH_sparc */
+#define PRESERVE_TLSREG(ctx) //do nothing
+#endif 
 
 typedef struct myth_ctx_withcall_param
 {
@@ -120,9 +126,7 @@ static inline void myth_swap_context_s(myth_context_t switch_from,
 {
 	//clear
 	g_ctx_withcall_params.fn = NULL;
-#ifdef MYTH_ARCH_sparc
-	PRESERVE_G7(switch_to);
-#endif /* MYTH_ARCH_sparc */
+	PRESERVE_TLSREG(switch_to);
 	swapcontext(&switch_from->uc, &switch_to->uc);
 	//execute
 	if (g_ctx_withcall_params.fn) {
@@ -137,30 +141,24 @@ static inline void myth_swap_context_withcall_s(myth_context_t switch_from,
 {
 	//set
 	g_ctx_withcall_params.fn = func;
-  g_ctx_withcall_params.arg1 = arg1;
-  g_ctx_withcall_params.arg2 = arg2;
-  g_ctx_withcall_params.arg3 = arg3;
+	g_ctx_withcall_params.arg1 = arg1;
+	g_ctx_withcall_params.arg2 = arg2;
+	g_ctx_withcall_params.arg3 = arg3;
 
-#ifdef MYTH_ARCH_sparc
-	PRESERVE_G7(switch_to);
-#endif /* MYTH_ARCH_sparc */
+	PRESERVE_TLSREG(switch_to);
 	swapcontext(&switch_from->uc, &switch_to->uc);
 	//execute
 	if (g_ctx_withcall_params.fn) {
 		g_ctx_withcall_params.fn(g_ctx_withcall_params.arg1,
-      g_ctx_withcall_params.arg2, g_ctx_withcall_params.arg3);
+    g_ctx_withcall_params.arg2, g_ctx_withcall_params.arg3);
 	}
 }
-/*static inline void myth_get_context_s(myth_context_t ctx)
-{
-}*/
+
 static inline void myth_set_context_s(myth_context_t ctx)
 {
 	//clear
 	g_ctx_withcall_params.fn = NULL;
-#ifdef MYTH_ARCH_sparc
-	PRESERVE_G7(ctx);
-#endif /* MYTH_ARCH_sparc */
+	PRESERVE_TLSREG(ctx);
 	setcontext(&ctx->uc);
 }
 static inline void myth_set_context_withcall_s(myth_context_t switch_to,
@@ -168,12 +166,10 @@ static inline void myth_set_context_withcall_s(myth_context_t switch_to,
 {
 	//set
 	g_ctx_withcall_params.fn = func;
-  g_ctx_withcall_params.arg1 = arg1;
-  g_ctx_withcall_params.arg2 = arg2;
-  g_ctx_withcall_params.arg3 = arg3;
-#ifdef MYTH_ARCH_sparc
-	PRESERVE_G7(switch_to);
-#endif /* MYTH_ARCH_sparc */
+	g_ctx_withcall_params.arg1 = arg1;
+	g_ctx_withcall_params.arg2 = arg2;
+	g_ctx_withcall_params.arg3 = arg3;
+	PRESERVE_TLSREG(switch_to);
 	setcontext(&switch_to->uc);
 }
 
@@ -181,7 +177,7 @@ static void empty_context_ep(void)
 {
 	if (g_ctx_withcall_params.fn) {
 		g_ctx_withcall_params.fn(g_ctx_withcall_params.arg1,
-      g_ctx_withcall_params.arg2, g_ctx_withcall_params.arg3);
+		g_ctx_withcall_params.arg2, g_ctx_withcall_params.arg3);
 	}
 }
 
@@ -218,16 +214,14 @@ static void voidcall_context_ep(int pfn0, int pfn1)
 #define myth_set_context_withcall(ctx,fn,a1,a2,a3) \
   {myth_context_switch_hook(ctx); myth_set_context_withcall_i(ctx,fn,a1,a2,a3);}
 #else /* MYTH_ASSEMBLY_CONTEXT */
-
-// Ant: set context -> hook_set, swap context -> hook_swap
 #define myth_set_context(ctx) \
-  {/*myth_context_switch_hook_set(ctx);*/ myth_set_context_s(ctx);}
+  {myth_context_switch_hook(ctx); myth_set_context_s(ctx);}
 #define myth_swap_context(from,to) \
-  {/*myth_context_switch_hook_swap(from,to);*/ myth_swap_context_s(from,to);}
+  {myth_context_switch_hook(to); myth_swap_context_s(from,to);}
 #define myth_swap_context_withcall(from,to,fn,a1,a2,a3) \
-  {/*myth_context_switch_hook_swap(from,to);*/ myth_swap_context_withcall_s(from,to,fn,a1,a2,a3);}
+  {myth_context_switch_hook(to); myth_swap_context_withcall_s(from,to,fn,a1,a2,a3);}
 #define myth_set_context_withcall(ctx,fn,a1,a2,a3) \
-  {/*myth_context_switch_hook_set(ctx);*/ myth_set_context_withcall_s(ctx,fn,a1,a2,a3);}
+  {myth_context_switch_hook(ctx); myth_set_context_withcall_s(ctx,fn,a1,a2,a3);}
 #endif
 
 //Make a context for executing "void foo(void)"
@@ -259,7 +253,29 @@ static inline void myth_make_context_voidcall(myth_context_t ctx,
 	//Set retuen address
 	*dest_addr = (uint64_t) func;
 #elif defined MYTH_CONTEXT_ARCH_sparc 
-#error "Not implemented yet"
+#ifdef MYTH_ARCH_sparc_v9
+  uint64_t stack_tail = (uint64_t) stack;
+  stack_tail -= 8;
+  uint64_t *dest_addr, *fp;
+  stack_tail &= 0xFFFFFFFFFFFFFFF0;
+  ctx->sp = stack_tail - FRAMESIZE * 2 - STACKBIAS;
+  fp = (uint64_t *) (ctx->sp + STACKBIAS + SAVE_FP);
+  *fp = (uint64_t) (stack_tail - FRAMESIZE - STACKBIAS);
+  dest_addr = (uint64_t *) (ctx->sp + STACKBIAS + SAVE_I7);
+  *dest_addr = (uint64_t) func - 8;
+#else
+  uint32_t stack_tail = (uint32_t) stack;
+  stack_tail -= 4;
+  uint32_t *dest_addr, *fp;
+  stack_tail &= 0xFFFFFFF0;
+  /* synthesize two frames */
+  ctx->sp = stack_tail - FRAMESIZE * 2;
+  /* do not use ctx->sp, it is pointer arthmetic */
+  fp = (uint32_t *) (ctx->sp + SAVE_FP); /* %fp */
+  *fp = (uint32_t) (stack_tail - FRAMESIZE);
+  dest_addr = (uint32_t *) (ctx->sp + SAVE_I7); /* %i7 */
+  *dest_addr = (uint32_t) func - 8;
+#endif
 #elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
 	uintptr_t stack_start = ((uintptr_t) stack) - (stacksize - sizeof(void*));
 	getcontext(&ctx->uc);
@@ -280,19 +296,34 @@ static inline void myth_make_context_empty(myth_context_t ctx, void *stack,
 {
 #if defined MYTH_CONTEXT_ARCH_i386
 	//Get stack tail
-	uint32_t stack_tail=((uint32_t)stack);
+	uint32_t stack_tail = (uint32_t) stack;
 	//Align
 	stack_tail &= 0xFFFFFFF0;
 	//Set stack pointer
 	ctx->esp = stack_tail;
 #elif defined MYTH_CONTEXT_ARCH_amd64
 	//Get stack tail
-	uint64_t stack_tail = ((uint64_t)stack);
+	uint64_t stack_tail = (uint64_t) stack;
 	//Align
 	stack_tail &= 0xFFFFFFFFFFFFFFF0;
 	//Set stack pointer
 	ctx->rsp = stack_tail;
-#elif defined MYTH_CONTEXT_ARCH_sparc 
+#elif defined MYTH_CONTEXT_ARCH_sparc
+#ifdef MYTH_ARCH_sparc_v9
+  uint64_t stack_tail = (uint64_t) stack;
+  uint64_t *fp;
+	stack_tail &= 0xFFFFFFFFFFFFFFF0;
+  ctx->sp = stack_tail - FRAMESIZE * 2 - STACKBIAS;
+  fp = (uint64_t *) (ctx->sp + STACKBIAS + SAVE_FP);
+  *fp = (uint64_t) (stack_tail - FRAMESIZE - STACKBIAS);
+#else
+  uint32_t stack_tail = (uint32_t) stack;
+  uint32_t *fp;
+  stack_tail &= 0xFFFFFFF0;
+  ctx->sp = stack_tail - FRAMESIZE * 2;
+  fp = (uint32_t *) (stack_tail - FRAMESIZE * 2 + SAVE_FP); /* %fp */
+  *fp = (uint32_t) (stack_tail - FRAMESIZE);
+#endif
 #elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
 	myth_make_context_voidcall(ctx, empty_context_ep, stack, stacksize);
 #endif
@@ -564,7 +595,9 @@ static inline void myth_make_context_empty(myth_context_t ctx, void *stack,
 	myth_unreachable();\
 	}
 
-#elif defined MYTH_CONTEXT_ARCH_sparc || defined MYTH_CONTEXT_ARCH_UNIVERSAL
+#elif defined MYTH_CONTEXT_ARCH_sparc
+
+#elif defined MYTH_CONTEXT_ARCH_UNIVERSAL
 
 #else /* UNSUPPORTED ARCH */
 #error "This architecture is not supported"

@@ -35,8 +35,24 @@
 //Runqueue length
 #define INITIAL_QUEUE_SIZE (65536*2)
 
+// (1) when MYTH_WRAP_MALLOC is undefined, we do not 
+// define malloc, calloc, etc. at all, so the default
+// behavior is guaranteeed.
+// (2) when MYTH_WRAP_MALLOC is defined but
+// MYTH_WRAP_MALLOC_RUNTIME is undefined, we always
+// wrap malloc. it is the behavior of the previous 
+// implementation
+// (3) when both MYTH_WRAP_MALLOC and MYTH_WRAP_MALLOC_RUNTIME
+// are defined, the environment variable "MYTH_DONT_WRAP_MALLOC"
+// determines whether malloc etc. are wrapped. if its first 
+// character is '1', malloc etc. are not wrapped. 
+// otherwise they are wrapped
+
 //Wrap malloc function as worker-private freelist
 #define MYTH_WRAP_MALLOC
+//Turn on/off malloc wrap by environment variable
+#define MYTH_WRAP_MALLOC_RUNTIME
+
 
 //Wrap and multipelx I/O functions
 //#define MYTH_WRAP_SOCKIO
@@ -118,8 +134,15 @@
 #define MYTH_LOG_INITIAL_BUFFER_SIZE 1024
 //Collect context switching events
 #define MYTH_COLLECT_CONTEXT_SWITCH
-//Enable thread annotation
-#define MYTH_ENABLE_THREAD_ANNOTATION
+
+//Enable setting the name for each thread
+//By default thread-specific name (<memory address of thread descriptor>@<recycle count>) is assigned,
+//so huge number of categories are generated.
+//Thus it is strongly recommended to annotate by hand for each thread when enabling this option
+//#define MYTH_ENABLE_THREAD_ANNOTATION
+
+#define MYTH_LOG_MERGE_SAME_NAME_THREADS
+
 //Maximum length for thread annotation
 #define MYTH_THREAD_ANNOTATION_MAXLEN 100
 
@@ -183,15 +206,9 @@
 //#define MYTH_FLMALLOC_TLS
 
 //Inline context switching codes by inline assembler
-//#define MYTH_INLINE_CONTEXT
+#define MYTH_INLINE_CONTEXT
 //At inlined codes, save callee-saved registers explicitly
 #define MYTH_INLINE_PUSH_CALLEE_SAVED
-
-//Option for overhead evaluation
-//#define MYTH_NO_JOIN
-//#define MYTH_NO_SWITCH
-//#define MYTH_ONE_STACK
-//#define MYTH_NO_QUEUEOP
 
 //To switch context, use jmp instruction instead of ret
 #define USE_JUMP_INSN_A
@@ -212,10 +229,16 @@
 //#define MYTH_SAVE_FPCSR
 #elif (!defined MYTH_FORCE_ARCH_UNIVERSAL) && (defined __sparc__)
 #define MYTH_ARCH_sparc
+  #if defined __arch64__
+  #define MYTH_ARCH_sparc_v9
+  #else
+  #define MYTH_ARCH_sparc_v8
+  #endif
 // FIXME: Do we need spinlock here?
 #undef MYTH_INTERNAL_LOCK_SPINLOCK2
 #define MYTH_INTERNAL_LOCK_SPINLOCK1
 #undef MYTH_INLINE_CONTEXT
+
 #else
 #define MYTH_ARCH_UNIVERSAL
 //force to use pthread_spin

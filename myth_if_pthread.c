@@ -26,9 +26,9 @@ int sched_yield(void)
 	env = myth_get_current_env();
 	profiler_add_time_stop(env->this_thread, env->rank, 2);
 #endif /*PROFILER_ON*/
-
+	
 	real_sched_yield();
-	myth_yield_body();
+	myth_yield_body(1);
 	return 0;
 }
 

@@ -15,6 +15,7 @@
 
 typedef struct myth_running_env
 {
+
 #ifdef PROFILER_ON
 	//node_allocator node_mem;
 	//record_allocator record_mem;
@@ -55,7 +56,6 @@ typedef struct myth_running_env
 	//-1:Main thread, must not be terminated at the scheduling loop
 	//0:Currently application is running
 	//1:Application is terminated. Worker thread should exit scheduling loop and terminate itself
-
 }__attribute__((aligned(CACHE_LINE_SIZE))) myth_running_env,*myth_running_env_t;
 
 typedef struct myth_thread* (*myth_steal_func_t)(int);

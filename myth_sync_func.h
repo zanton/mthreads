@@ -62,6 +62,7 @@ static inline int myth_barrier_wait_body(myth_barrier_t bar)
 	newval--;
 	b->rest=newval;
 	if (newval!=0){
+
 #ifdef PROFILER_ON
 		// Ant: [record time] [o14] waiting on barrier, task stops, myth_barrier_wait_body()
 		profiler_add_time_stop(this_thread, env->rank, 14);
@@ -145,6 +146,7 @@ MYTH_CTX_CALLBACK void myth_jc_wait_1(void *arg1,void *arg2,void *arg3)
 	// Ant: [record time] [s10] waiting on jc, task from run queue starts, myth_jc_wait_1()
 	profiler_add_time_start(next, env->rank, 10);
 #endif /*PROFILER_ON*/
+
 }
 
 MYTH_CTX_CALLBACK void myth_jc_wait_2(void *arg1,void *arg2,void *arg3)
@@ -302,7 +304,7 @@ static inline int myth_mutex_lock_body(myth_mutex_t mtx)
 		if (!loop_count){
 			loop_count=loop_count_start;
 			//yield execution
-			myth_yield_body();
+			myth_yield_body(0);
 		}
 	}
 	return 0;
@@ -425,6 +427,7 @@ static inline int myth_felock_destroy_body(myth_felock_t fe)
 
 static inline int myth_felock_lock_body(myth_felock_t fe)
 {
+
 #ifdef PROFILER_ON
 	// Ant: [record time] [o16] waiting on felock, task stops, myth_felock_lock_body()
 	myth_running_env_t env;
@@ -540,10 +543,12 @@ static inline int myth_felock_wait_lock_body(myth_felock_t fe,int val)
 		myth_yield_body();
 #endif
 	}
+
 #ifdef PROFILER_ON
 	// Ant: [record time] [s13] felock releases, task starts, end of myth_felock_wait_lock_body()
 	profiler_add_time_start(this_thread, e->rank, 13);
 #endif /*PROFILER_ON*/
+
 }
 
 static inline int myth_felock_unlock_body(myth_felock_t fe)

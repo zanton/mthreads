@@ -38,12 +38,6 @@ static inline void myth_set_def_stack_size_body(size_t newsize){
 #define myth_dprintf(...) myth_dprintf_1((char*)__func__,__VA_ARGS__)
 void myth_dprintf_1(char *func,char *fmt,...);
 
-static inline void myth_entry_point_cleanup(myth_thread_t this_thread);
-
-static inline myth_thread_t myth_create_body(myth_func_t func,void *arg,size_t stack_size);
-static inline void myth_yield_body(void);
-static inline void myth_join_body(myth_thread_t th,void **result);
-
 //Return a new thread descriptor
 static inline myth_thread_t get_new_myth_thread_struct_desc(myth_running_env_t env)
 {
@@ -354,14 +348,11 @@ static inline myth_thread_t myth_self_body(void)
 	return env->this_thread;
 }
 
-static inline void myth_yield2_body(void);
-
 MYTH_CTX_CALLBACK void myth_create_1(void *arg1,void *arg2,void *arg3)
 {
 	MAY_BE_UNUSED uint64_t t0,t1;
 	myth_running_env_t env=arg1;
 	myth_thread_t new_thread=arg3;
-
 	myth_thread_t this_thread=env->this_thread;
 	myth_func_t fn=(myth_func_t)arg2;
 	t0=0;t1=0;
@@ -424,20 +415,11 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	env=myth_get_current_env();
 	//myth_log_add(env,MYTH_LOG_INT);
 
-	myth_thread_t this_thread;
-	this_thread = env->this_thread;
-
 #ifdef PROFILER_ON
 	// Ant: [record time] [o10] task ends by spawning new task, myth_create_body()
-	profiler_add_time_stop(this_thread, env->rank, 10);
+	profiler_add_time_stop(env->this_thread, env->rank, 10);
 #endif /*PROFILER_ON*/
 
-#ifdef MYTH_ONE_STACK
-	char l_stack[REAL_STACK_SIZE];
-	new_thread = get_new_myth_thread_struct(REAL_STACK_SIZE,env);
-	stk = (void*) l_stack;
-	stk_size = REAL_STACK_SIZE;
-#else /* default */
 	// Allocate new thread descriptor
 	new_thread = get_new_myth_thread_struct_desc(env);
 #ifdef MYTH_SPLIT_STACK_DESC /* default */
@@ -447,15 +429,15 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #else
 	stk = new_thread->stack;
 #endif /* MYTH_SPLIT_STACK_DESC */
-	stk_size = g_default_stack_size;
-#endif /* MYTH_ONE_STACK */
+	stk_size = (stack_size>0)?stack_size:g_default_stack_size;
 
-	// Initialize thread descriptor
+  // Initialize thread descriptor
 	init_myth_thread_struct(env, new_thread);
 	new_thread->result = arg;
 
-#ifdef SWITCH_AFTER_CREATE /* default */
-	myth_make_context_empty(&new_thread->context, stk, stk_size);
+	stk_size=g_default_stack_size-sizeof(void*)*2;
+#ifdef SWITCH_AFTER_CREATE
+	myth_make_context_empty(&new_thread->context,stk,stk_size);
 #else
 	new_thread->entry_func = func;
 	//Create context
@@ -472,6 +454,10 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #endif /* MYTH_CREATE_PROF */
 
 #ifdef SWITCH_AFTER_CREATE /* default */
+	myth_thread_t this_thread;
+
+	// Push current thread to runqueue and switch context to new thread
+	this_thread = env->this_thread;
 
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_create_body] set task_node for new task
@@ -479,14 +465,9 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	new_thread->level = this_thread->level + 1;
 #endif /*PROFILER_ON*/
 
-	// Push current thread to runqueue and switch context to new thread
-
 #ifdef MYTH_CREATE_PROF_DETAIL
 	env->prof_data.create_d_tmp=myth_get_rdtsc();
 #endif /* MYTH_CREATE_PROF_DETAIL */
-#if defined MYTH_NO_SWITCH
-	myth_create_1((void*)env, (void*) func, (void*) new_thread);
-#else /* default */
 	myth_swap_context_withcall(&this_thread->context,
     &new_thread->context, myth_create_1, (void*)env, (void*)func, (void*)new_thread);
 #ifdef MYTH_SWITCH_PROF
@@ -494,7 +475,6 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	env->prof_data.sw_cycles += t1 - env->prof_data.sw_tmp;
 	env->prof_data.sw_cnt ++;
 #endif /* MYTH_SWITCH_PROF */
-#endif /* MYTH_NO_SWITCH */
 #else
 	//Push a new thread to runqueue
 	myth_queue_push(&env->runnable_q, new_thread);
@@ -504,15 +484,171 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #endif /* MYTH_CREATE_PROF */
 #endif /* SWITCH_AFTER_CREATE */
 
-#ifdef MYTH_NO_JOIN
-	void *ret;
-	ret = new_thread->result;
-	free_myth_thread_struct(env, new_thread);
-	return (myth_thread_t) ret;
-#else /* default */
 	//myth_log_add(this_thread->env,MYTH_LOG_USER);
 	return new_thread;
-#endif /* MYTH_NO_JOIN */
+}
+
+//Create a thread without switching context
+static inline myth_thread_t myth_create_ex_body(myth_func_t func,
+  void *arg, myth_thread_option_t opt)
+{
+	MAY_BE_UNUSED uint64_t t0, t1;
+	myth_thread_t new_thread;
+	myth_running_env_t env;
+	void *stk;
+	MAY_BE_UNUSED size_t stk_size;
+	t0 = 0;
+	t1 = 0;
+	size_t stack_size;
+	size_t custom_data_size;
+	void *custom_data_ptr;
+	int switch_immediately;
+	if (!opt){
+		stack_size=0;
+		custom_data_size=0;
+		custom_data_ptr=NULL;
+		switch_immediately=1;
+	}
+	else{
+		stack_size=opt->stack_size;
+		custom_data_size=opt->custom_data_size;
+		custom_data_ptr=opt->custom_data;
+		switch_immediately=opt->switch_immediately;
+	}
+
+#ifdef MYTH_CREATE_PROF
+	t0 = myth_get_rdtsc();
+#endif /* MYTH_CREATE_PROF */
+
+#ifdef MYTH_CREATE_PROF_DETAIL
+	t0 = myth_get_rdtsc();
+#endif /* MYTH_CREATE_PROF_DETAIL */
+
+	env=myth_get_current_env();
+	//myth_log_add(env,MYTH_LOG_INT);
+
+	// Allocate new thread descriptor
+	new_thread = get_new_myth_thread_struct_desc(env);
+#ifdef MYTH_SPLIT_STACK_DESC /* default */
+	// allocate stack and get pointer
+	stk = get_new_myth_thread_struct_stack(env, stack_size);
+	new_thread->stack = stk;
+#else
+	stk = new_thread->stack;
+#endif /* MYTH_SPLIT_STACK_DESC */
+	stk_size = (stack_size>0)?stack_size:g_default_stack_size;
+
+	//Allocate custom data region on stack
+	if (custom_data_size>0){
+		new_thread->custom_data_size=custom_data_size;
+		intptr_t i_stk=(intptr_t)stk;
+		//Align 16byte
+		i_stk-=16+(((custom_data_size+15)>>4)<<4);
+		new_thread->custom_data_ptr=(void*)(i_stk+16);
+		memcpy((void*)(i_stk+16),custom_data_ptr,custom_data_size);
+		stk=(void*)i_stk;
+	}
+	else{new_thread->custom_data_size=0;}
+
+  // Initialize thread descriptor
+	init_myth_thread_struct(env, new_thread);
+	new_thread->result = arg;
+
+	stk_size=g_default_stack_size-sizeof(void*)*2;
+	if (switch_immediately){
+		myth_make_context_empty(&new_thread->context,stk,stk_size);
+
+#ifdef MYTH_CREATE_PROF_DETAIL
+		t1 = myth_get_rdtsc();
+		env->prof_data.create_alloc += t1-t0;
+#endif /* MYTH_CREATE_PROF_DETAIL */
+
+#ifdef MYTH_CREATE_PROF
+		env->prof_data.create_cycles_tmp=t0;
+#endif /* MYTH_CREATE_PROF */
+
+		myth_thread_t this_thread;
+		// Push current thread to runqueue and switch context to new thread
+		this_thread = env->this_thread;
+#ifdef MYTH_CREATE_PROF_DETAIL
+	env->prof_data.create_d_tmp=myth_get_rdtsc();
+#endif /* MYTH_CREATE_PROF_DETAIL */
+		myth_swap_context_withcall(&this_thread->context,
+		&new_thread->context, myth_create_1, (void*)env, (void*)func, (void*)new_thread);
+	}
+	else{
+		new_thread->entry_func = func;
+		//Create context
+		myth_make_context_voidcall(&new_thread->context, myth_entry_point, stk, stk_size);
+
+#ifdef MYTH_CREATE_PROF_DETAIL
+		t1 = myth_get_rdtsc();
+		env->prof_data.create_alloc += t1-t0;
+#endif /* MYTH_CREATE_PROF_DETAIL */
+
+#ifdef MYTH_CREATE_PROF
+		env->prof_data.create_cycles_tmp=t0;
+#endif /* MYTH_CREATE_PROF */
+
+		//Push a new thread to runqueue
+		myth_queue_push(&env->runnable_q, new_thread);
+#ifdef MYTH_CREATE_PROF
+		t1=myth_get_rdtsc();
+		env->prof_data.create_cycles+=t1-t0;env->prof_data.create_cnt++;
+#endif /* MYTH_CREATE_PROF */
+	}
+
+	return new_thread;
+}
+
+static inline myth_thread_t myth_create_nosched_body(myth_func_t func,void *arg,myth_thread_option_t opt)
+{
+	MAY_BE_UNUSED uint64_t t0,t1;
+	myth_thread_t new_thread;
+	myth_running_env_t env;
+	void *stk;
+	MAY_BE_UNUSED size_t stk_size;
+	size_t stack_size;
+	size_t custom_data_size;
+	void *custom_data_ptr;
+	if (!opt){
+		stack_size=0;
+		custom_data_size=0;
+		custom_data_ptr=NULL;
+	}
+	else{
+		stack_size=opt->stack_size;
+		custom_data_size=opt->custom_data_size;
+		custom_data_ptr=opt->custom_data;
+	}
+	t0=0;
+	t1=0;
+	env=myth_get_current_env();
+	//Allocate new thread descriptor
+	new_thread=get_new_myth_thread_struct_desc(env);
+	//allocate stack and get pointer
+	stk=get_new_myth_thread_struct_stack(env,stack_size);
+	new_thread->stack=stk;
+	stk_size=/*g_default_*/stack_size;
+	//Allocate custom data region on stack
+	if (custom_data_size>0){
+		new_thread->custom_data_size=custom_data_size;
+		intptr_t i_stk=(intptr_t)stk;
+		//Align 16byte
+		i_stk-=16+(((custom_data_size+15)>>4)<<4);
+		new_thread->custom_data_ptr=(void*)(i_stk+16);
+		memcpy((void*)(i_stk+16),custom_data_ptr,custom_data_size);
+		//fprintf(stderr,"Data:%X\n",*(int32_t*)(i_stk+16));
+		stk=(void*)i_stk;
+	}
+	else{new_thread->custom_data_size=0;}
+	//Initialize thread descriptor
+	init_myth_thread_struct(env,new_thread);
+	new_thread->result=arg;
+	new_thread->entry_func=func;
+	//Create context
+	myth_make_context_voidcall(&new_thread->context,myth_entry_point,stk,stk_size);
+	return new_thread;
 }
 
 static inline void myth_exit_body(void *ret)
@@ -535,14 +671,16 @@ MYTH_CTX_CALLBACK void myth_yield_1(void *arg1,void *arg2,void *arg3)
 		env->this_thread=next_thread;
 		next_thread->env=env;
 	}
+
 #ifdef PROFILER_ON
 	// Ant: [record time] [s4] new-yielded task starts, myth_yield_1()
 	profiler_add_time_start(next_thread, env->rank, 4);
 #endif /*PROFILER_ON*/
+
 }
 
 //Yield execution to next runnable thread
-static inline void myth_yield_body(void)
+static inline void myth_yield_body(int force_worksteal)
 {
 	myth_running_env_t env;
 	myth_thread_t th,next;
@@ -553,8 +691,15 @@ static inline void myth_yield_body(void)
 	myth_dprintf("myth_yield:thread %p yields execution to scheduler\n",th);
 #endif
 	//Get next runnable thread
-	next=myth_queue_pop(&env->runnable_q);
-	if (!next)next=g_myth_steal_func(env->rank);
+	next=NULL;
+	if (force_worksteal){
+		next=g_myth_steal_func(env->rank);
+		if (!next)next=myth_queue_pop(&env->runnable_q);
+	}
+	else{
+		next=myth_queue_pop(&env->runnable_q);
+		if (!next)next=g_myth_steal_func(env->rank);
+	}
 	if (next){
 		next->env=env;
 		//Switch context and push current thread to runqueue
@@ -575,10 +720,12 @@ MYTH_CTX_CALLBACK void myth_yield2_1(void *arg1,void *arg2,void *arg3)
 		env->this_thread=next_thread;
 		next_thread->env=env;
 	}
+
 #ifdef PROFILER_ON
 	// Ant: [record time] [s5] new-yielded2 task starts, myth_yield2_1()
 	profiler_add_time_start(next_thread, env->rank, 5);
 #endif /*PROFILER_ON*/
+
 }
 
 //Yield execution to next runnable thread
@@ -616,6 +763,7 @@ static inline void myth_join_1(myth_running_env_t e,myth_thread_t th,void **resu
 	// Ant: [record time] [s6] joining finishes, the same task restarts, myth_join_1()
 	profiler_add_time_start(e->this_thread, e->rank, 6);
 #endif /*PROFILER_ON*/
+
 }
 
 MYTH_CTX_CALLBACK void myth_join_2(void *arg1,void *arg2,void *arg3)
@@ -633,6 +781,7 @@ MYTH_CTX_CALLBACK void myth_join_2(void *arg1,void *arg2,void *arg3)
 	// Ant: [record time] [s7] waiting on joining, new task from run queue starts, myth_join_2()
 	profiler_add_time_start(next_thread, env->rank, 7);
 #endif /*PROFILER_ON*/
+
 }
 
 MYTH_CTX_CALLBACK void myth_join_3(void *arg1,void *arg2,void *arg3)
@@ -801,9 +950,8 @@ static inline void myth_detach_body(myth_thread_t th)
 	}
 }
 
-#ifndef SWITCH_AFTER_CREATE
 //Entry point of threads
-static void myth_entry_point(void)
+static void __attribute__((unused)) myth_entry_point(void)
 {
 	myth_thread_t this_thread;
 	myth_running_env_t env;
@@ -824,7 +972,6 @@ static void myth_entry_point(void)
 	this_thread->result=(*(this_thread->entry_func))(this_thread->result);
 	myth_entry_point_cleanup(this_thread);
 }
-#endif
 
 //Switch to next_thread
 MYTH_CTX_CALLBACK void myth_entry_point_1(void *arg1,void *arg2,void *arg3)
@@ -925,6 +1072,7 @@ MYTH_CTX_CALLBACK void myth_entry_point_2(void *arg1,void *arg2,void *arg3)
 
 static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 {
+
 #ifdef PROFILER_ON
 	// Ant: [record time] [o13] task ends, myth_entry_point_cleanup()
 	profiler_add_time_stop(this_thread, this_thread->env->rank, 13);
@@ -963,7 +1111,6 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 	this_thread_v=this_thread;
 	myth_internal_lock_lock(&this_thread->lock);
 	myth_thread_t wait_thread=this_thread_v->join_thread;
-
 	//Execute a thread waiting for current thread
 	if (wait_thread){
 		//sanity check
@@ -1002,7 +1149,6 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 	t1=myth_get_rdtsc();
 	env->prof_data.ep_pop+=t1-t0;
 #endif
-#ifndef MYTH_NO_SWITCH
 	if (next){
 #ifdef MYTH_EP_PROF_DETAIL
 		env->prof_data.ep_d_tmp=myth_get_rdtsc();
@@ -1017,7 +1163,6 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 		//Switch to the scheduler
 		myth_set_context_withcall(&env->sched.context,myth_entry_point_2,(void*)env,this_thread,NULL);
 	}
-#endif
 	if (next){
 		myth_entry_point_1((void*)env,this_thread,next);
 	}

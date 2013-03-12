@@ -12,7 +12,7 @@
 
 //Initialize specifying the number of worker threads
 //If specified less than 1, MYTH_WORKER_NUM or the number of CPU cores used instead.
-int myth_init_ex_body(int worker_num)
+int myth_init_ex_body(int worker_num, size_t def_stack_size)
 {
 	intptr_t nthreads;
 	myth_init_process_affinity_info();
@@ -27,11 +27,13 @@ int myth_init_ex_body(int worker_num)
 	if (nthreads<=0){nthreads=myth_get_cpu_num();}
 	g_worker_thread_num=nthreads;
 	//set default stack size
+	size_t s;
 	env=getenv(ENV_MYTH_DEF_STKSIZE);
-	if (env){
-		size_t s=atoi(env);
-		if (s>0){myth_set_def_stack_size_body(s);}
+	s=def_stack_size;
+	if (s==0 && env){
+		s=atoi(env);
 	}
+	if (s>0){myth_set_def_stack_size_body(s);}
 	//Initialize logger
 	myth_log_init();
 	//Initialize memory allocators
@@ -53,9 +55,9 @@ int myth_init_ex_body(int worker_num)
 }
 
 //Initialize
-void myth_init_body(void)
+void myth_init_body(int worker_num,size_t def_stack_size)
 {
-	myth_init_ex_body(0);
+	myth_init_ex_body(worker_num,def_stack_size);
 
 #ifdef PROFILER_ON
 	// Ant: [prof] Initialize profiler, must be before creating threads
@@ -68,7 +70,6 @@ void myth_init_body(void)
 		real_pthread_create(&g_envs[i].worker,NULL,myth_worker_thread_fn,(void*)i);
 	}
 	g_envs[0].worker=real_pthread_self();
-
 	//Initialize each worker threads
 	myth_worker_thread_fn((void*)(intptr_t)0);
 }
@@ -345,13 +346,17 @@ void myth_fini_ex_body(void)
 //Termination
 void myth_fini_body(void)
 {
+	//add context switch as a sentinel for emitting logs
+	int i;
+	for (i=0;i<g_worker_thread_num;i++){
+		myth_log_add_context_switch(&g_envs[i],THREAD_PTR_SCHED_TERM);
+	}
 	myth_startpoint_exit_ex_body(0);
 	myth_running_env_t env;
 	int rank;
 	env=myth_get_current_env();
 	rank=env->rank;
 	assert(rank==0);
-	int i;
 	//Wait for other worker threads
 	for (i=1;i<g_worker_thread_num;i++){
 		real_pthread_join(g_envs[i].worker,NULL);

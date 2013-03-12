@@ -152,7 +152,7 @@ static inline void myth_setup_worker(int rank)
 		size_t th_size;
 		size_t alloc_size;
 		char *th_ptr;
-		th_size=MYTH_MALLOC_SIZE_TO_RSIZE(STACK_SIZE);
+		th_size=g_default_stack_size;
 		alloc_size=th_size*INITIAL_STACK_ALLOC_UNIT;
 #ifdef ALLOCATE_STACK_BY_MALLOC
 		th_ptr=myth_flmalloc(env->rank,alloc_size);
@@ -165,10 +165,19 @@ static inline void myth_setup_worker(int rank)
 		th_ptr=mmap(NULL,alloc_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
 #endif
 #endif
-		th_ptr+=th_size-sizeof(void*);
+		/*th_ptr+=th_size-sizeof(void*);
 		for (i=0;i<INITIAL_STACK_ALLOC_UNIT;i++){
 			void **ret;
 			ret=(void**)th_ptr;
+			myth_freelist_push(env->freelist_stack,ret);
+			th_ptr+=th_size;
+		}*/
+		th_ptr+=th_size-(sizeof(void*)*2);
+		for (i=0;i<STACK_ALLOC_UNIT;i++){
+			void**
+			ret=(void**)th_ptr;
+			uintptr_t *blk_size=(uintptr_t*)(th_ptr+sizeof(void*));
+			*blk_size=0;//indicates default
 			myth_freelist_push(env->freelist_stack,ret);
 			th_ptr+=th_size;
 		}
@@ -267,12 +276,6 @@ static inline void myth_worker_start_ex_body(int rank)
 	myth_setup_worker(rank);
 	myth_running_env_t env;
 	env=myth_get_current_env();
-
-#ifdef PROFILER_ON
-	// Ant: [prof] [myth_worker_start_ex_body] set task_node for sched 1..n
-	//env->sched.node = profiler_get_sched_node(rank);
-#endif /*PROFILER_ON*/
-
 	env->sched.stack=NULL;
 	//Call thread scheduler
 	myth_sched_loop();
@@ -305,7 +308,7 @@ static inline void myth_startpoint_init_ex_body(int rank)
 #if defined MYTH_ENABLE_THREAD_ANNOTATION && defined MYTH_COLLECT_LOG
 	sprintf(this_th->annotation_str,"%p(main)",this_th);
 #endif
-	//Set worker thread descriptor
+	//Set worker thread descrptor
 	this_th->env = env;
 
 #ifdef PROFILER_ON
@@ -318,9 +321,8 @@ static inline void myth_startpoint_init_ex_body(int rank)
 #endif /*PROFILER_ON*/
 
 	//Initialize context for scheduler
-	env->sched.stack = myth_malloc(SCHED_STACK_SIZE);
-	myth_make_context_voidcall(&env->sched.context, myth_sched_loop, 
-		(void*)(((char*)env->sched.stack)+SCHED_STACK_SIZE), SCHED_STACK_SIZE);
+	env->sched.stack=myth_malloc(SCHED_STACK_SIZE);
+	myth_make_context_voidcall(&env->sched.context,myth_sched_loop,(void*)(((char*)env->sched.stack)+SCHED_STACK_SIZE-sizeof(void*)),SCHED_STACK_SIZE-sizeof(void*));
 	//Switch to scheduler
 	myth_swap_context_withcall(&this_th->context, &env->sched.context,
 		myth_startpoint_init_ex_1, env, this_th, NULL);
@@ -349,6 +351,7 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 	myth_notify_workers_exit();
 	//If running on a different worker, switch context
 	while (env->rank != rank) {
+
 #ifdef PROFILER_ON
 		// Ant: [record time] [o19] task 0 stops to be moved to environment 0, myth_startpoint_exit_ex_body()
 		profiler_add_time_stop(env->this_thread, env->rank, 19);
@@ -371,12 +374,23 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 static inline void *myth_worker_thread_fn(void *args)
 {
 	intptr_t rank=(intptr_t)args;
+	int bind_workers;
+	char *env;
 #ifdef WORKER_SET_AFFINITY
-	//Set affinity
-	cpu_set_t cs;
-	cs=myth_get_worker_cpuset(rank);
-	real_pthread_setaffinity_np(real_pthread_self(),sizeof(cpu_set_t),&cs);
+	bind_workers=1;
+#else
+	bind_workers=0;
 #endif
+	env=getenv(ENV_MYTH_BIND_WORKERS);
+	if (env){
+		bind_workers=atoi(env);
+	}
+	if (bind_workers>0){
+		//Set affinity
+		cpu_set_t cs;
+		cs=myth_get_worker_cpuset(rank);
+		real_pthread_setaffinity_np(real_pthread_self(),sizeof(cpu_set_t),&cs);
+	}
 
 #ifdef PROFILER_ON
 	// Ant: [prof] initialize profiler for each thread
@@ -444,7 +458,7 @@ static void myth_sched_loop(void)
 	t0=0;
 	t1=0;
 	env=myth_get_current_env();
-
+	myth_log_add_context_switch(env,NULL);
 #ifdef MYTH_SCHED_LOOP_DEBUG
 	myth_dprintf("myth_sched_loop:entered main loop\n");
 #endif
@@ -517,5 +531,4 @@ static inline int myth_get_num_workers_body(void)
 {
 	return g_worker_thread_num;
 }
-
 #endif
