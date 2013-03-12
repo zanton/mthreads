@@ -51,8 +51,8 @@ int num_time_records_threshold;
 __thread char * profiler_filename;
 
 #ifdef PROFILER_WATCH_LIMIT
-double * under_depth_work_time;
-double * under_depth_last_time;
+double ** under_depth_work_time;
+double ** under_depth_last_time;
 #endif /*PROFILER_WATCH_LIMIT*/
 
 
@@ -135,7 +135,7 @@ task_node_t profiler_malloc_task_node(int worker) {
 
 	// Use myth_flmalloc()
 	ret = myth_flmalloc(worker, sizeof(task_node));
-	assert(ret != NULL);
+	//assert(ret != NULL);
 
 	//printf("task myth_malloc: %p\n", ret);
 	return ret;
@@ -167,7 +167,7 @@ time_record_t profiler_malloc_time_record(int worker) {
 
 	// Use myth_flmalloc()
 	ret = myth_flmalloc(worker, sizeof(time_record));
-	assert(ret != NULL);
+	//assert(ret != NULL);
 
 	//printf("myth_malloc: %p\n", ret);
 	return ret;
@@ -182,7 +182,7 @@ long long * profiler_malloc_long_long_array(int worker) {
 	// Use myth_flmalloc()
 	if (profiler_num_papi_events > 0) {
 		ret = myth_flmalloc(worker, profiler_num_papi_events * sizeof(long long));
-		assert(ret != NULL);
+		//assert(ret != NULL);
 	}
 
 	return ret;
@@ -284,8 +284,13 @@ void profiler_init(int worker_thread_num) {
 	init_memory_allocator();
 
 #ifdef PROFILER_WATCH_LIMIT
-	under_depth_work_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
-	under_depth_last_time = (double *) myth_malloc(profiler_num_workers * sizeof(double));
+	under_depth_work_time = (double **) myth_malloc(profiler_num_workers * sizeof(double *));
+	under_depth_last_time = (double **) myth_malloc(profiler_num_workers * sizeof(double *));
+	int i;
+	for (i=0; i<profiler_num_workers; i++) {
+	  under_depth_work_time[i] = (double *) myth_malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
+	  under_depth_last_time[i] = (double *) myth_malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
+	}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Initialize overview file lock
@@ -319,7 +324,6 @@ void profiler_init(int worker_thread_num) {
 	}
 
 	// PROFILER_PAPI_EVENT_x environment variables
-	int i;
 	char name[MAX_PAPI_EVENT_NAME_LENGTH];
 	for (i=0; i<profiler_num_papi_events; i++) {
 		sprintf(name, "%s%d", ENV_PROFILER_PAPI_EVENT_NAME, i+1);
@@ -371,9 +375,13 @@ void profiler_init_worker(int worker) {
 	g_envs[worker].tail = NULL;
 	g_envs[worker].num_time_records = 0;
 
+	int i;
+
 #ifdef PROFILER_WATCH_LIMIT
-	under_depth_work_time[worker] = 0.0;
-	under_depth_last_time[worker] = 0.0; // >=0: stop time, <0: start time
+	for (i=profiler_watch_from; i<=profiler_watch_to; i++) {
+	  under_depth_work_time[worker][i-profiler_watch_from] = 0.0;
+	  under_depth_last_time[worker][i-profiler_watch_from] = 0.0; // >=0: stop time, <0: start time
+	}
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Worker data file
@@ -381,7 +389,6 @@ void profiler_init_worker(int worker) {
 	sprintf(profiler_filename, "%s%d%s", FILE_FOR_EACH_WORKER_THREAD, worker, ".txt");
 	FILE * fp = fopen(profiler_filename, "w");
 	fprintf(fp, "# level, in-level index, in-level parent_index, time type, worker, time");
-	int i;
 	//char event_name[20];
 	for (i=0; i<profiler_num_papi_events; i++)
 		fprintf(fp, ", %s", papi_event_names[i]);
@@ -430,10 +437,18 @@ void profiler_fini() {
 #ifdef PROFILER_WATCH_LIMIT
 	// Print work time under profiler_depth_limit
 	fprintf(fp_prof_overview, "Total work time from level %d to level %d:\n", profiler_watch_from, profiler_watch_to);
-	for (i=0; i<profiler_num_workers; i++)
-		fprintf(fp_prof_overview, "Worker %d: %0.9lf\n", i, under_depth_work_time[i]);
-	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double));
-	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double));
+	int l;
+	for (l=profiler_watch_from; l<=profiler_watch_to; l++) {
+	  fprintf(fp_prof_overview, "Level %d\n", l);
+	  for (i=0; i<profiler_num_workers; i++)
+	    fprintf(fp_prof_overview, "Worker %d: %0.9lf\n", i, under_depth_work_time[i][l-profiler_watch_from]);
+	}
+	for (i=0; i<profiler_num_workers; i++) {
+	  myth_free(under_depth_work_time[i], (profiler_watch_to-profiler_watch_from+1) * sizeof(double));
+	  myth_free(under_depth_last_time[i], (profiler_watch_to-profiler_watch_from+1) * sizeof(double));
+	}
+	myth_free(under_depth_work_time, profiler_num_workers * sizeof(double *));
+	myth_free(under_depth_last_time, profiler_num_workers * sizeof(double *));
 #endif /*PROFILER_WATCH_LIMIT*/
 
 	// Program execution time
@@ -492,10 +507,15 @@ task_node_t profiler_create_root_node(int worker) {
 	node->parent_index = 0;
 	node->counter = 0;
 	node->worker = worker;
+
+#ifdef PROFILER_USE_INDEXER_LOCK
 	// Indexing
 	myth_internal_lock_lock(indexer_lock[(int) node->level]);
 	node->index = indexer[(int) node->level]++;
 	myth_internal_lock_unlock(indexer_lock[(int) node->level]);
+#else
+	node->index = 0;
+#endif /*PROFILER_USE_INDEXER_LOCK*/
 
 	return node;
 #else
@@ -522,10 +542,15 @@ task_node_t profiler_create_new_node(task_node_t parent, int worker) {
 	new_node->parent_index = parent->index;
 	new_node->counter = 0;
 	new_node->worker = worker;
+
+#ifdef PROFILER_USE_INDEXER_LOCK
 	// Indexing
 	myth_internal_lock_lock(indexer_lock[(int) new_node->level]);
 	new_node->index = indexer[(int) new_node->level]++;
 	myth_internal_lock_unlock(indexer_lock[(int) new_node->level]);
+#else
+	new_node->index = 0;
+#endif /*PROFILER_USE_INDEXER_LOCK*/
 
 	return new_node;
 #else
@@ -567,7 +592,7 @@ void profiler_write_to_file(int worker) {
 	// Open file
 	FILE *fp;
 	fp = fopen(get_data_file_name_for_worker(), "a");
-	assert(fp != NULL);
+	//assert(fp != NULL);
 
 	// Write to file
 	while (t != NULL) {
@@ -600,7 +625,7 @@ void profiler_write_to_file(int worker) {
 
 	myth_internal_lock_lock(overviewfile_lock);
 	fp = fp_prof_overview;
-	assert(fp != NULL);
+	//assert(fp != NULL);
 	fprintf(fp, "\nprofiler_write_to_file()\n");
 	fprintf(fp, "%lf\n", start_time);
 	fprintf(fp, "worker: %d\n", worker);
@@ -647,13 +672,13 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
 			switch (profiler_watch_mode) {
 			case 0: // watch time
-				under_depth_last_time[worker] = -profiler_get_curtime();
+				under_depth_last_time[worker][thread->level-profiler_watch_from] = -profiler_get_curtime();
 				break;
 			case 1: // watch hardware counter by PAPI
 				if (profiler_num_papi_events > 0) {
 					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 						PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-					under_depth_last_time[worker] = -g_envs[worker].values[0];
+					under_depth_last_time[worker][thread->level-profiler_watch_from] = -g_envs[worker].values[0];
 				}
 				break;
 			}
@@ -673,7 +698,7 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 		env->head = record;
 		env->tail = record;
 	} else {
-		assert(env->tail != NULL);
+	  //assert(env->tail != NULL);
 		env->tail->next = record;
 		env->tail = record;
 	}
@@ -718,18 +743,18 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
 			switch (profiler_watch_mode) {
 			case 0:
-				if (under_depth_last_time[worker] < 0) {
+				if (under_depth_last_time[worker][thread->level-profiler_watch_from] < 0) {
 					double time = profiler_get_curtime();
-					under_depth_work_time[worker] += time + under_depth_last_time[worker];
-					under_depth_last_time[worker] = time;
+					under_depth_work_time[worker][thread->level-profiler_watch_from] += time + under_depth_last_time[worker][thread->level-profiler_watch_from];
+					under_depth_last_time[worker][thread->level-profiler_watch_from] = time;
 				}
 				break;
 			case 1:
-				if (profiler_num_papi_events > 0 && under_depth_last_time[worker] < 0) {
+				if (profiler_num_papi_events > 0 && under_depth_last_time[worker][thread->level-profiler_watch_from] < 0) {
 					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 						PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-					under_depth_work_time[worker] += g_envs[worker].values[0] + under_depth_last_time[worker];
-					under_depth_last_time[worker] = g_envs[worker].values[0];
+					under_depth_work_time[worker][thread->level-profiler_watch_from] += g_envs[worker].values[0] + under_depth_last_time[worker][thread->level-profiler_watch_from];
+					under_depth_last_time[worker][thread->level-profiler_watch_from] = g_envs[worker].values[0];
 				}
 				break;
 			}
@@ -752,7 +777,7 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 		env->head = record;
 		env->tail = record;
 	} else {
-		assert(env->tail != NULL);
+	  //assert(env->tail != NULL);
 		env->tail->next = record;
 		env->tail = record;
 	}
