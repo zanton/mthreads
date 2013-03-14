@@ -23,6 +23,11 @@ typedef struct myth_running_env
 	long long * values;
 	time_record_t head, tail;
 	int num_time_records;
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	time_record_t subtree_start, subtree_stop;
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
 #endif /*PROFILER_ON*/
 
 	//The following entries are only accessed from the owner

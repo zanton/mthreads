@@ -10,8 +10,9 @@
 
 // Preprocessor directives
 #define PROFILER_ON
-#define PROFILER_WATCH_LIMIT
-//#define PROFILER_USE_INDEXER_LOCK
+//#define PROFILER_WATCH_LIMIT
+#define PROFILER_USE_INDEXER_LOCK
+#define PROFILER_OBSERVE_SUBTREE
 
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
@@ -53,6 +54,10 @@ typedef struct time_record {
 	counter_record counters; // counter data
 	struct time_record * next; // pointer to next time_record
 	struct task_node * node; // the task that this record belongs to
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	int subtree;
+#endif /*PROFILER_OBSERVE_SUBTREE*/
 } time_record, * time_record_t;
 
 // Ant: [struct task_node] structure to save tasks' infomation
@@ -70,7 +75,7 @@ void 		profiler_init(int worker_thread_num);
 void		profiler_init_worker(int rank);
 void		profiler_fini_worker(int rank);
 void 		profiler_fini();
-task_node_t profiler_create_new_node(task_node_t parent, int worker);
+task_node_t profiler_create_new_node(task_node_t parent, int worker, int level);
 void 		profiler_add_time_start(void * thread, int worker, int start_code);
 void 		profiler_add_time_stop(void * thread, int worker, int stop_code);
 task_node_t profiler_create_root_node();

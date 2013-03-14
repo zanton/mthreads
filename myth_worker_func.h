@@ -366,6 +366,10 @@ static inline void myth_startpoint_exit_ex_body(int rank)
 		//Obtain worker thread descriptor again, because env may be changed
 		env=th->env;
 	}
+#ifdef PROFILER_ON
+		// Ant: [record time] [o20] program (task 0) is considered to stop here, right before calling myth_cleanup_worker(), myth_startpoint_exit_ex_body()
+		profiler_add_time_stop(env->this_thread, env->rank, 20);
+#endif /*PROFILER_ON*/
 	//Cleanup
 	myth_cleanup_worker(rank);
 }

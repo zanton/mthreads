@@ -226,6 +226,7 @@ void profiler_init(int worker_thread_num) {
 	// Get program start time
 	profiler_program_start_time = profiler_get_curtime();
 
+	//TODO: create directory "tsprof" if it does not exist
 	// Open overview data file
 	fp_prof_overview = fopen(get_data_file_name_for_general(), "w");
 
@@ -283,10 +284,10 @@ void profiler_init(int worker_thread_num) {
 	profiler_num_workers = worker_thread_num;
 	init_memory_allocator();
 
+	int i;
 #ifdef PROFILER_WATCH_LIMIT
 	under_depth_work_time = (double **) myth_malloc(profiler_num_workers * sizeof(double *));
 	under_depth_last_time = (double **) myth_malloc(profiler_num_workers * sizeof(double *));
-	int i;
 	for (i=0; i<profiler_num_workers; i++) {
 	  under_depth_work_time[i] = (double *) myth_malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
 	  under_depth_last_time[i] = (double *) myth_malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
@@ -374,6 +375,10 @@ void profiler_init_worker(int worker) {
 	g_envs[worker].head = NULL;
 	g_envs[worker].tail = NULL;
 	g_envs[worker].num_time_records = 0;
+#ifdef PROFILER_OBSERVE_SUBTREE
+	g_envs[worker].subtree_start = NULL;
+	g_envs[worker].subtree_stop = NULL;
+#endif /*PROFILER_OBSERVE_SUBTREE*/
 
 	int i;
 
@@ -523,14 +528,21 @@ task_node_t profiler_create_root_node(int worker) {
 #endif /*PROFILER_ON*/
 }
 
-task_node_t profiler_create_new_node(task_node_t parent, int worker) {
+task_node_t profiler_create_new_node(task_node_t parent, int worker, int level) {
 #ifdef PROFILER_ON
 	// PROFILER OFF
 	if (profiler_off) return NULL;
 
 	// Out of profiling limit
+#ifdef PROFILER_OBSERVE_SUBTREE
+	if (parent == NULL)
+		return NULL;
+	else if (level > profiler_depth_limit)
+		return parent;
+#else
 	if (parent == NULL || parent->level == profiler_depth_limit)
 		return NULL;
+#endif /*PROFILER_OBSERVE_SUBTREE*/
 
 	task_node_t new_node;
 
@@ -594,6 +606,26 @@ void profiler_write_to_file(int worker) {
 	fp = fopen(get_data_file_name_for_worker(), "a");
 	//assert(fp != NULL);
 
+#ifdef PROFILER_OBSERVE_SUBTREE
+	if (env->subtree_start != NULL && env->subtree_stop != NULL) {
+		// Attach subtree_start and subtree_stop to time record list
+		env->subtree_start->next = env->subtree_stop;
+		if (env->num_time_records == 0) {
+			env->head = env->subtree_start;
+			env->tail = env->subtree_stop;
+		} else {
+			//assert(env->tail != NULL);
+			env->tail->next = env->subtree_start;
+			env->tail = env->subtree_stop;
+		}
+		env->num_time_records += 2;
+
+		// Reset subtree_start and subtree_stop
+		env->subtree_start = NULL;
+		env->subtree_stop = NULL;
+	}
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
 	// Write to file
 	while (t != NULL) {
 		tt = t->next;
@@ -651,6 +683,10 @@ time_record_t create_time_record(int type, int worker, double time) {
 	}
 	record->next = NULL;
 
+#ifdef PROFILER_OBSERVE_SUBTREE
+	record->subtree = 0;
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
 	return record;
 #else
 	return NULL;
@@ -688,12 +724,47 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 		return;
 	}
 
-	// Create time record
-	time_record_t record = create_time_record(start_code << 1, worker, 0);
-
-	// Attach to env's time record list
 	myth_running_env_t env;
 	env = myth_get_current_env();//g_envs[worker];
+
+	time_record_t record = NULL;
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	if (thread->level > node->level) {
+		if (env->subtree_start == NULL) {
+			record = create_time_record(start_code << 1, worker, 0);
+			record->subtree = 1;
+			env->subtree_start = record;
+		} else if (env->subtree_start->node != node) {
+			// Attach subtree_start and subtree_stop to time record list
+			env->subtree_start->next = env->subtree_stop;
+			if (env->num_time_records == 0) {
+				env->head = env->subtree_start;
+				env->tail = env->subtree_stop;
+			} else {
+			  //assert(env->tail != NULL);
+				env->tail->next = env->subtree_start;
+				env->tail = env->subtree_stop;
+			}
+			env->num_time_records += 2;
+
+			// Reset subtree_start and subtree_stop
+			env->subtree_start = NULL;
+			env->subtree_stop = NULL;
+
+			// New subtree_start
+			record = create_time_record(start_code << 1, worker, 0);
+			record->subtree = 1;
+			env->subtree_start = record;
+		} else {
+			return;
+		}
+	} else {
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
+	// Create time record
+	record = create_time_record(start_code << 1, worker, 0);
+	// Attach to env's time record list
 	if (env->num_time_records == 0) {
 		env->head = record;
 		env->tail = record;
@@ -702,9 +773,14 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 		env->tail->next = record;
 		env->tail = record;
 	}
+	env->num_time_records++;
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	}
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
 	// Pointer to node
 	record->node = node;
-	env->num_time_records++;
 
 	// Increment node's counter
 	node->counter += 2;
@@ -767,12 +843,27 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	//TODO: Must be at the begining
 	double time = profiler_get_curtime();
 
-	// Create time record
-	time_record_t record = create_time_record((stop_code << 1) + 1, worker, time);
-
-	// Attach to env's time record list
 	myth_running_env_t env;
 	env = myth_get_current_env();//g_envs[worker];
+
+	time_record_t record = NULL;
+	// Create time record
+	record = create_time_record((stop_code << 1) + 1, worker, time);
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	if (thread->level > node->level) {
+		if (env->subtree_stop != NULL) {
+			// Delete the subtree_stop time record
+			env->subtree_stop->node->counter -= 2;
+			profiler_free_time_record(worker, env->subtree_stop);
+			env->subtree_stop = NULL;
+		}
+		record->subtree = 1;
+		env->subtree_stop = record;
+	} else {
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
+	// Attach to env's time record list
 	if (env->num_time_records == 0) {
 		env->head = record;
 		env->tail = record;
@@ -781,9 +872,14 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 		env->tail->next = record;
 		env->tail = record;
 	}
+	env->num_time_records++;
+
+#ifdef PROFILER_OBSERVE_SUBTREE
+	}
+#endif /*PROFILER_OBSERVE_SUBTREE*/
+
 	// Pointer to node
 	record->node = node;
-	env->num_time_records++;
 
 	// Increment node's counter
 	node->counter += 2;
