@@ -460,9 +460,20 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 	this_thread = env->this_thread;
 
 #ifdef PROFILER_ON
+	// Get function name
+	/*Dl_info dlinfo;
+	dladdr(func, &dlinfo);
+	int len = strlen(dlinfo.dli_fname) + strlen(dlinfo.dli_sname) + 2;
+	printf("len = %d\n", len);
+	char * name = " ";
+	if (len > 0) {
+		name = malloc(len * sizeof(char));
+		strcpy(name, dlinfo.dli_sname);
+		strcpy(name + strlen(dlinfo.dli_fname) + 1, dlinfo.dli_sname);
+	}*/
 	// Ant: [prof] [myth_create_body] set task_node for new task
 	new_thread->level = this_thread->level + 1;
-	new_thread->node = (task_node_t) profiler_create_new_node(this_thread->node, env->rank, new_thread->level);
+	new_thread->node = (profiler_task_node_t) profiler_create_new_node(this_thread->node, env->rank, new_thread->level);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_CREATE_PROF_DETAIL
@@ -1076,8 +1087,6 @@ static inline void myth_entry_point_cleanup(myth_thread_t this_thread)
 #ifdef PROFILER_ON
 	// Ant: [record time] [o13] task ends, myth_entry_point_cleanup()
 	profiler_add_time_stop(this_thread, this_thread->env->rank, 13);
-	profiler_mark_delete_task_node(this_thread->node);
-	//profiler_output_task_data(this_thread->node);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_NO_JOIN

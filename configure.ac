@@ -8,13 +8,13 @@ if test "$ac_test_CFLAGS" = set; then
   CFLAGS=$ac_save_CFLAGS
 elif test $ac_cv_prog_cc_g = yes; then
   if test "$GCC" = yes; then
-    CFLAGS="-g -O3 -Wall -ftls-model=initial-exec"
+    CFLAGS="-g -O3 -Wall -ftls-model=initial-exec -I/usr/local/include/open-trace-format"
   else
     CFLAGS="-g"
   fi
 else
   if test "$GCC" = yes; then
-    CFLAGS="-O3 -Wall -ftls-model=initial-exec"
+    CFLAGS="-O3 -Wall -ftls-model=initial-exec -I/usr/local/include/open-trace-format"
   else
     CFLAGS=
   fi
@@ -24,6 +24,8 @@ AM_PROG_AS
 AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR(Test for dlopen failed.)])
 AC_CHECK_LIB(pthread, pthread_create, [], [AC_MSG_ERROR(Test for libpthread failed.)])
 AC_CHECK_LIB(papi, PAPI_library_init, [], [AC_MSG_ERROR(Test for libpapi failed.)])
+AC_CHECK_LIB(open-trace-format, OTF_Writer_open, [], [AC_MSG_ERROR(Test for otf failed.)])
+#AC_CHECK_LIB(dl, dladdr, [], [AC_MSG_ERROR(Test for libdl failed.)])
 
 # Check size
 AC_CHECK_SIZEOF([int])

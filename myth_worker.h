@@ -21,8 +21,10 @@ typedef struct myth_running_env
 	//record_allocator record_mem;
 	int EventSet;
 	long long * values;
-	time_record_t head, tail;
 	int num_time_records;
+	profiler_time_record_t head, tail;
+	int num_task_nodes;
+	profiler_task_node_t head_node, tail_node;
 
 #ifdef PROFILER_OBSERVE_SUBTREE
 	time_record_t subtree_start, subtree_stop;

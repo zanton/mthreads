@@ -11,8 +11,6 @@
 // Preprocessor directives
 #define PROFILER_ON
 //#define PROFILER_WATCH_LIMIT
-#define PROFILER_USE_INDEXER_LOCK
-#define PROFILER_OBSERVE_SUBTREE
 
 // Ant: enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
@@ -28,7 +26,6 @@
 #define MAX_PAPI_EVENT_NAME_LENGTH 22
 
 #define DIR_FOR_PROF_DATA "./tsprof"
-//#define FILE_FOR_TASK_DATA "./tsprof/task_data.txt"
 #define FILE_FOR_EACH_WORKER_THREAD "./tsprof/worker_thread_"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 
@@ -40,46 +37,39 @@
 #include <papi.h>
 #include <limits.h>
 #include "myth_misc.h"
-//#include "myth_desc.h"
 
 
-typedef struct counter_record {
-	double time;	// Time value
-	long long * values; // PAPI counter values
-} counter_record, * counter_record_t;
+typedef struct profiler_task_node {
+	unsigned int 	index; 				// Hash code
+	char * 			tree_path; 			// Generation tree path
+	int 			level; 				// Task's depth
+	char * 			function_name; 		// Function's name
+	int 			head_scl;			// head source code location
+	int				tail_scl; 			// tail source code location
+	int 			num_child_tasks;	// number of born child tasks
+	struct profiler_task_node * next;	// pointer to next task_node
+	//int				worker;				// worker where its memory is allocated
+} profiler_task_node, *profiler_task_node_t;
 
-typedef struct time_record {
-	int type; 		// briefly, 0: start, 1: stop
-	int worker;		// worker thread's rank
-	counter_record counters; // counter data
-	struct time_record * next; // pointer to next time_record
-	struct task_node * node; // the task that this record belongs to
-
-#ifdef PROFILER_OBSERVE_SUBTREE
-	int subtree;
-#endif /*PROFILER_OBSERVE_SUBTREE*/
-} time_record, * time_record_t;
-
-// Ant: [struct task_node] structure to save tasks' infomation
-typedef struct task_node {
-	char level; 	// task's depth level
-	int index;		// in-level index
-	int parent_index;
-	int counter; 	// number of time records pointing to it, LSB=0 -> task's running, 1 -> task ended
-	int worker;		// worker on which it's allocated
-} task_node, * task_node_t;
+typedef struct profiler_time_record {
+	int 				type; 				// start or stop, what kind of start or stop
+	unsigned int 		task_index; 		// task's identifier
+	unsigned long long 	time; 				// at what time it happened
+	int 				scl; 				// source code location
+	long long * 		values; 			// hardware counter values
+	struct profiler_time_record * next;	// pointer to next time_record
+	//int				worker;				// worker where its memory is allocated
+} profiler_time_record, *profiler_time_record_t;
 
 
-double 		profiler_get_curtime();
-void 		profiler_init(int worker_thread_num);
-void		profiler_init_worker(int rank);
-void		profiler_fini_worker(int rank);
-void 		profiler_fini();
-task_node_t profiler_create_new_node(task_node_t parent, int worker, int level);
-void 		profiler_add_time_start(void * thread, int worker, int start_code);
-void 		profiler_add_time_stop(void * thread, int worker, int stop_code);
-task_node_t profiler_create_root_node();
-void		profiler_mark_delete_task_node(task_node_t node);
-void		profiler_write_to_file(int worker);
+void 					profiler_init(int worker_thread_num);
+void					profiler_init_worker(int rank);
+void					profiler_fini_worker(int rank);
+void 					profiler_fini();
+profiler_task_node_t 	profiler_create_new_node(profiler_task_node_t parent, int worker, int level);
+void 					profiler_add_time_start(void * thread, int worker, int start_code);
+void 					profiler_add_time_stop(void * thread, int worker, int stop_code);
+profiler_task_node_t 	profiler_create_root_node();
+void					profiler_write_to_file(int worker);
 
 #endif /* MYTH_PROFILER_H_ */

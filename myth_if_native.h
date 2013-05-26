@@ -112,4 +112,8 @@ myth_thread_t myth_schedapi_runqueue_peek(int victim);
 int myth_schedapi_rand(void);
 int myth_schedapi_rand2(int min,int max);
 
+// Profiler API
+void profiler_app_register_task(char * filename, int line);
+
+
 #endif /* MYTH_IF_NATIVE_H_ */
