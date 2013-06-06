@@ -113,7 +113,7 @@ int myth_schedapi_rand(void);
 int myth_schedapi_rand2(int min,int max);
 
 // Profiler API
-void profiler_app_register_task(char * filename, int line);
-
+void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code);
+char * profiler_function_create_tree_path(char * tree_path, int next_value);
 
 #endif /* MYTH_IF_NATIVE_H_ */

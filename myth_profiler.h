@@ -21,6 +21,7 @@
 #define ENV_PROFILER_WATCH_FROM "PROFILER_WATCH_FROM"
 #define ENV_PROFILER_WATCH_MODE "PROFILER_WATCH_MODE"
 #define ENV_PROFILER_WATCH_TO "PROFILER_WATCH_TO"
+#define ENV_PROFILER_TRACE_NAME "PROFILER_TRACE_NAME"
 
 #define MAX_NUM_PAPI_EVENTS 4
 #define MAX_PAPI_EVENT_NAME_LENGTH 22
@@ -61,6 +62,16 @@ typedef struct profiler_time_record {
 	//int				worker;				// worker where its memory is allocated
 } profiler_time_record, *profiler_time_record_t;
 
+typedef struct profiler_function_record {
+	int 				type;
+	char * 				file;
+	int 				line;
+	int 				level;
+	char * 				tree_path;
+	unsigned long long 	time;
+	long long * 		values;
+	struct profiler_function_record * next;
+} profiler_function_record, *profiler_function_record_t;
 
 void 					profiler_init(int worker_thread_num);
 void					profiler_init_worker(int rank);
