@@ -25,7 +25,6 @@ AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR(Test for dlopen failed.)])
 AC_CHECK_LIB(pthread, pthread_create, [], [AC_MSG_ERROR(Test for libpthread failed.)])
 AC_CHECK_LIB(papi, PAPI_library_init, [], [AC_MSG_ERROR(Test for libpapi failed.)])
 AC_CHECK_LIB(open-trace-format, OTF_Writer_open, [], [AC_MSG_ERROR(Test for otf failed.)])
-#AC_CHECK_LIB(dl, dladdr, [], [AC_MSG_ERROR(Test for libdl failed.)])
 
 # Check size
 AC_CHECK_SIZEOF([int])

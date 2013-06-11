@@ -1233,25 +1233,6 @@ void profiler_function_fini() {
 }
 
 void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code) {
-	switch (code) {
-	case 0:
-		if (line != 374)
-			printf("code=%d, but line=%d\n", code, line);
-		break;
-	case 1:
-		if (line != 388 && line != 398 && line != 415 && line != 424)
-			printf("code=%d, but line=%d\n", code, line);
-		break;
-	case 2:
-		if (line != 392 && line != 402 && line != 419 && line != 428)
-			printf("code=%d, but line=%d\n", code, line);
-		break;
-	case 3:
-		if (line != 432)
-			printf("code=%d, but line=%d\n", code, line);
-		break;
-	}
-
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
