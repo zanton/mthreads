@@ -74,11 +74,6 @@ __thread int profiler_retval;
 // Data filenames
 __thread char * profiler_filename;
 
-#ifdef PROFILER_WATCH_LIMIT
-double ** under_depth_work_time;
-double ** under_depth_last_time;
-#endif /*PROFILER_WATCH_LIMIT*/
-
 // OTF
 OTF_FileManager * myManager;
 OTF_Writer * myWriter;
@@ -321,14 +316,6 @@ void profiler_init(int worker_thread_num) {
 	profiler_num_workers = worker_thread_num;
 
 	int i;
-#ifdef PROFILER_WATCH_LIMIT
-	under_depth_work_time = (double **) malloc(profiler_num_workers * sizeof(double *));
-	under_depth_last_time = (double **) malloc(profiler_num_workers * sizeof(double *));
-	for (i=0; i<profiler_num_workers; i++) {
-	  under_depth_work_time[i] = (double *) malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
-	  under_depth_last_time[i] = (double *) malloc((profiler_watch_to-profiler_watch_from+1) * sizeof(double));
-	}
-#endif /*PROFILER_WATCH_LIMIT*/
 
 	// Make prof folder
 	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
@@ -507,13 +494,6 @@ void profiler_init_worker(int worker) {
 
 	int i;
 
-#ifdef PROFILER_WATCH_LIMIT
-	for (i=profiler_watch_from; i<=profiler_watch_to; i++) {
-	  under_depth_work_time[worker][i-profiler_watch_from] = 0.0;
-	  under_depth_last_time[worker][i-profiler_watch_from] = 0.0; // >=0: stop time, <0: start time
-	}
-#endif /*PROFILER_WATCH_LIMIT*/
-
 	// Initialize EventSet
 	if (profiler_num_papi_events > 0) {
 		if ((profiler_retval = PAPI_create_eventset(&g_envs[worker].EventSet)) != PAPI_OK)
@@ -547,23 +527,6 @@ void profiler_fini() {
 
 	// OTF: initialize second OTF trace
 	profiler_function_fini();
-
-#ifdef PROFILER_WATCH_LIMIT
-	// Print work time under profiler_depth_limit
-	fprintf(fp_prof_overview, "Total work time from level %d to level %d:\n", profiler_watch_from, profiler_watch_to);
-	int l;
-	for (l=profiler_watch_from; l<=profiler_watch_to; l++) {
-	  fprintf(fp_prof_overview, "Level %d\n", l);
-	  for (i=0; i<profiler_num_workers; i++)
-	    fprintf(fp_prof_overview, "Worker %d: %0.9lf\n", i, under_depth_work_time[i][l-profiler_watch_from]);
-	}
-	for (i=0; i<profiler_num_workers; i++) {
-	  free(under_depth_work_time[i], (profiler_watch_to-profiler_watch_from+1) * sizeof(double));
-	  free(under_depth_last_time[i], (profiler_watch_to-profiler_watch_from+1) * sizeof(double));
-	}
-	free(under_depth_work_time, profiler_num_workers * sizeof(double *));
-	free(under_depth_last_time, profiler_num_workers * sizeof(double *));
-#endif /*PROFILER_WATCH_LIMIT*/
 
 #endif /*PROFILER_ON*/
 }
@@ -740,24 +703,6 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 
 	// Out of profiling limit
 	if (node == NULL) {
-
-#ifdef PROFILER_WATCH_LIMIT
-		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
-			switch (profiler_watch_mode) {
-			case 0: // watch time
-				under_depth_last_time[worker][thread->level-profiler_watch_from] = -profiler_get_curtime();
-				break;
-			case 1: // watch hardware counter by PAPI
-				if (profiler_num_papi_events > 0) {
-					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
-						profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-					under_depth_last_time[worker][thread->level-profiler_watch_from] = -g_envs[worker].values[0];
-				}
-				break;
-			}
-		}
-#endif /*PROFILER_WATCH_LIMIT*/
-
 		return;
 	}
 
@@ -814,29 +759,6 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 
 	// Out of profiling limit
 	if (node == NULL) {
-
-#ifdef PROFILER_WATCH_LIMIT
-		if (thread->level >= profiler_watch_from && thread->level <= profiler_watch_to) {
-			switch (profiler_watch_mode) {
-			case 0:
-				if (under_depth_last_time[worker][thread->level-profiler_watch_from] < 0) {
-					double time = profiler_get_curtime();
-					under_depth_work_time[worker][thread->level-profiler_watch_from] += time + under_depth_last_time[worker][thread->level-profiler_watch_from];
-					under_depth_last_time[worker][thread->level-profiler_watch_from] = time;
-				}
-				break;
-			case 1:
-				if (profiler_num_papi_events > 0 && under_depth_last_time[worker][thread->level-profiler_watch_from] < 0) {
-					if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
-						profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-					under_depth_work_time[worker][thread->level-profiler_watch_from] += g_envs[worker].values[0] + under_depth_last_time[worker][thread->level-profiler_watch_from];
-					under_depth_last_time[worker][thread->level-profiler_watch_from] = g_envs[worker].values[0];
-				}
-				break;
-			}
-		}
-#endif /*PROFILER_WATCH_LIMIT*/
-
 		return;
 	}
 
@@ -1225,14 +1147,19 @@ void profiler_otf_fini() {
 }
 
 void profiler_function_init() {
+#ifdef PROFILER_ON
 	profiler_otf_init();
+#endif /*PROFILER_ON*/
 }
 
 void profiler_function_fini() {
+#ifdef PROFILER_ON
 	profiler_otf_fini();
+#endif /*PROFILER_ON*/
 }
 
 void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code) {
+#ifdef PROFILER_ON
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
@@ -1277,9 +1204,11 @@ void profiler_function_instrument(int level, char * tree_path, char * filename, 
 		for (i=0; i<profiler_num_papi_events; i++)
 			new_record->values[i] = g_envs[worker].values[i];
 	}
+#endif /*PROFILER_ON*/
 }
 
 void profiler_function_write() {
+#ifdef PROFILER_ON
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
@@ -1333,11 +1262,16 @@ void profiler_function_write() {
 	env->tail_fr = NULL;
 	env->num_function_records = 0;
 	//fprintf(stderr, "profiler_function_write(): %d out of %d\n", num_records_written, num_records);
+#endif /*PROFILER_ON*/
 }
 
 char * profiler_function_create_tree_path(char * tree_path, int next_value) {
+#ifdef PROFILER_ON
 	int length = strlen(tree_path) + 4;
 	char * new_tree_path = (char *) malloc(length * sizeof(char));
 	sprintf(new_tree_path, "%s_%d", tree_path, next_value);
 	return new_tree_path;
+#else
+	return NULL;
+#endif /*PROFILER_ON*/
 }

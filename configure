@@ -4163,7 +4163,6 @@ else
   as_fn_error $? "Test for otf failed." "$LINENO" 5
 fi
 
-#AC_CHECK_LIB(dl, dladdr, [], [AC_MSG_ERROR(Test for libdl failed.)])
 
 # Check size
 ac_ext=c
