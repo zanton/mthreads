@@ -47,8 +47,6 @@
 #define KEY_PROFILER_LINE_NUMBER 26
 
 
-#define PROFILER_RUNTIME_INSTRUMENT_OFF 1
-
 // For profiler
 int profiler_num_workers = 0;	// number of workers
 
@@ -61,6 +59,8 @@ char profiler_watch_from;
 char profiler_watch_mode = 0;
 char profiler_watch_to;
 char * profiler_trace_name;
+char profiler_lib_ins_off = 0;
+char profiler_app_ins_off = 0;
 
 // PAPI Events
 int papi_event_codes[MAX_NUM_PAPI_EVENTS];
@@ -87,17 +87,22 @@ myth_internal_lock_t * profiler_lock_fp_overview;
 
 
 // Headers
-void profiler_function_init();
-void profiler_function_fini();
+void profiler_otf_init(OTF_FileManager **, OTF_Writer **, char * );
+void profiler_otf_fini(OTF_FileManager **, OTF_Writer ** );
+void profiler_libins_init();
+void profiler_libins_fini();
+void profiler_appins_init();
+void profiler_appins_fini();
 void profiler_function_instrument(int , char * , char * , int , int );
-void profiler_function_write();
+void profiler_write_to_file(int );
+void profiler_libins_write_to_file(int );
+void profiler_appins_write_to_file(int );
 
-
-unsigned long long profiler_get_curtime()
+profiler_time_t profiler_get_curtime()
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1.0E6 + tv.tv_usec;
+	return tv.tv_sec * 1.0E9 + tv.tv_usec * 1.0E3;
 }
 
 void profiler_PAPI_fail(char *file, int line, char *call, int retval)
@@ -149,6 +154,7 @@ void profiler_otf_check(char * file, int line, int errno, int expected) {
 }
 
 int profiler_check_memory_usage() {
+#ifdef PROFILER_ON
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
@@ -160,9 +166,12 @@ int profiler_check_memory_usage() {
 		return 1;
 	else
 		return 0;
+#else
+	return 1;
+#endif /*PROFILER_ON*/
 }
 profiler_task_node_t profiler_malloc_task_node(int worker) {
-	// PROFILER OFF
+	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
 	profiler_task_node_t ret = NULL;
@@ -173,7 +182,7 @@ profiler_task_node_t profiler_malloc_task_node(int worker) {
 }
 
 profiler_time_record_t profiler_malloc_time_record(int worker) {
-	// PROFILER OFF
+	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
 	profiler_time_record_t ret = NULL;
@@ -183,21 +192,8 @@ profiler_time_record_t profiler_malloc_time_record(int worker) {
 	return ret;
 }
 
-long long * profiler_malloc_long_long_array(int worker) {
-	// PROFILER OFF
-	if (profiler_off) return NULL;
-
-	long long * ret = NULL;
-	if (profiler_num_papi_events > 0) {
-		ret = myth_flmalloc(worker, profiler_num_papi_events * sizeof(long long));
-		//assert(ret != NULL);
-	}
-
-	return ret;
-}
-
 profiler_function_record_t profiler_malloc_function_record(int worker) {
-	// PROFILER OFF
+	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
 	profiler_function_record_t ret = NULL;
@@ -216,19 +212,9 @@ void profiler_free_task_node(int worker, profiler_task_node_t node) {
 #endif /*PROFILER_ON*/
 }
 
-void profiler_free_long_long_array(int worker, long long * values) {
-#ifdef PROFILER_ON
-	if (profiler_num_papi_events > 0) {
-		assert(values);
-		myth_flfree(worker, profiler_num_papi_events * sizeof(long long), values);
-	}
-#endif /*PROFILER_ON*/
-}
-
 void profiler_free_time_record(int worker, profiler_time_record_t record) {
 #ifdef PROFILER_ON
 	assert(record);
-	profiler_free_long_long_array(worker, record->values);
 	myth_flfree(worker, sizeof(profiler_time_record), record);
 #endif /*PROFILER_ON*/
 }
@@ -236,17 +222,35 @@ void profiler_free_time_record(int worker, profiler_time_record_t record) {
 void profiler_free_function_record(int worker, profiler_function_record_t record) {
 #ifdef PROFILER_ON
 	assert(record);
-	profiler_free_long_long_array(worker, record->values);
 	myth_flfree(worker, sizeof(profiler_function_record), record);
 #endif /*PROFILER_ON*/
 }
 
-//char * profiler_get_data_file_name_for_worker() {
-//	return profiler_filename;
-//}
+profiler_time_record_t profiler_create_time_record(int type, int worker, profiler_time_t time) {
+#ifdef PROFILER_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return NULL;
 
-char * profiler_get_data_file_name_for_general() {
-	return FILE_FOR_GENERAL_INFO;
+	// Allocate memory
+	profiler_time_record_t record;
+	record = profiler_malloc_time_record(worker);
+
+	// Set up fields
+	record->type = type;
+	record->task_index = 0;
+	record->time = time;
+	record->scl = 0;
+	int i;
+	for (i=0; i<profiler_num_papi_events; i++) {
+		record->values[i] = 0;
+	}
+	record->next = NULL;
+
+	// Return
+	return record;
+#else
+	return NULL;
+#endif /*PROFILER_ON*/
 }
 
 void profiler_init(int worker_thread_num) {
@@ -270,6 +274,8 @@ void profiler_init(int worker_thread_num) {
 	env_var = getenv(ENV_PROFILER_NUM_PAPI_EVENTS);
 	if (env_var) {
 		profiler_num_papi_events = atoi(env_var);
+		if (profiler_num_papi_events > MAX_NUM_PAPI_EVENTS)
+			profiler_num_papi_events = MAX_NUM_PAPI_EVENTS;
 	}
 
 	// PROFILER_MEM_SIZE_LIMIT environment variable
@@ -312,6 +318,17 @@ void profiler_init(int worker_thread_num) {
 		profiler_trace_name = "anyname";
 	}
 
+	// PROFILER_LIB_INS_OFF environment variable
+	env_var = getenv(ENV_PROFILER_LIB_INSTRUMENT_OFF);
+	if (env_var)
+		profiler_lib_ins_off = atoi(env_var);
+
+	// PROFILER_OFF environment variable
+	env_var = getenv(ENV_PROFILER_APP_INSTRUMENT_OFF);
+	if (env_var)
+		profiler_app_ins_off = atoi(env_var);
+
+
 	// General initialization
 	profiler_num_workers = worker_thread_num;
 
@@ -320,7 +337,7 @@ void profiler_init(int worker_thread_num) {
 	// Make prof folder
 	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
 	// Open overview data file
-	profiler_fp_overview = fopen(profiler_get_data_file_name_for_general(), "w");
+	profiler_fp_overview = fopen(FILE_FOR_GENERAL_INFO, "w");
 	profiler_lock_fp_overview = (myth_internal_lock_t *) malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(profiler_lock_fp_overview);
 
@@ -350,126 +367,28 @@ void profiler_init(int worker_thread_num) {
 		}
 	}
 
-	// OTF: initialize
-	myManager = OTF_FileManager_open(100);
-	assert(myManager);
-	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 )* sizeof(char) );
-	sprintf(trace_file_name, "tsprof/%s_lib", profiler_trace_name);
-	myWriter = OTF_Writer_open(trace_file_name, profiler_num_workers, myManager);
-	assert(myWriter);
-	profiler_otf_errno = OTF_Writer_writeDefTimerResolution(myWriter, 0, 1000000);
-	assert(profiler_otf_errno);
-
-	// OTF: register DefKeyValue
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_OFF, OTF_INT32, "profiler_off", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_NUM_WORKERS, OTF_INT32, "profiler_num_workers", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_MEM_SIZE_LIMIT, OTF_INT32, "profiler_mem_size_limit", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_DEPTH_LIMIT, OTF_INT32, "profiler_depth_limit", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_NUM_PAPI_EVENTS, OTF_INT32, "profiler_num_papi_events", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_WATCH_FROM, OTF_INT32, "profiler_watch_from", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_WATCH_TO, OTF_INT32, "profiler_watch_to", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_WATCH_MODE, OTF_INT32, "profiler_watch_mode", NULL);
-	assert(profiler_otf_errno);
-	for (i=0; i<profiler_num_papi_events; i++) {
-		profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_PAPI_EVENT_1+i, OTF_UINT64, "papi_event_i", papi_event_names[i]);
-		assert(profiler_otf_errno);
-	}
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_TASK_LEVEL, OTF_INT32, "task level", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_TASK_TREE_PATH, OTF_BYTE_ARRAY, "task tree path", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_TIME_RECORD_TYPE, OTF_INT32, "time record type", NULL);
-	assert(profiler_otf_errno);
-
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_START_FUNCTION, OTF_INT32, "start function", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_START_SOURCE, OTF_INT32, "start source", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_START_TIME_RECORD_TYPE, OTF_INT32, "start time record type", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_STOP_FUNCTION, OTF_INT32, "stop function", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_STOP_SOURCE, OTF_INT32, "stop source", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_STOP_TIME_RECORD_TYPE, OTF_INT32, "stop time record type", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other time record types", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_START_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other start time record types", NULL);
-	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(myWriter, 0, KEY_PROFILER_STOP_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other stop time record types", NULL);
-	assert(profiler_otf_errno);
-
-
-	// OTF: write KeyValue
-	OTF_KeyValueList * kvlist;
-	kvlist = OTF_KeyValueList_new();
-	assert(kvlist);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_OFF, (int) profiler_off);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_NUM_WORKERS, (int) profiler_num_workers);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_MEM_SIZE_LIMIT, (int) profiler_mem_size_limit);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_DEPTH_LIMIT, (int) profiler_depth_limit);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_NUM_PAPI_EVENTS, (int) profiler_num_papi_events);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_WATCH_FROM, (int) profiler_watch_from);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_WATCH_TO, (int) profiler_watch_to);
-	assert(profiler_otf_errno == 0);
-	profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_WATCH_MODE, (int) profiler_watch_mode);
-	assert(profiler_otf_errno == 0);
-	for (i=0; i<profiler_num_papi_events; i++) {
-		profiler_otf_errno = OTF_KeyValueList_appendUint64(kvlist, KEY_PROFILER_PAPI_EVENT_1+i, 1);
-		assert(profiler_otf_errno == 0);
-	}
-
-	// OTF: write a NoOpKV event
-	profiler_otf_errno = OTF_Writer_writeDefinitionCommentKV(myWriter, 0, "Overview information", kvlist);
-	assert(profiler_otf_errno);
-
-	// OTF: create MasterControl entries for all processes
-	OTF_MasterControl * mc = OTF_Writer_getMasterControl(myWriter);
-	for (i=0; i<profiler_num_workers; i++) {
-		OTF_MasterControl_append(mc, i+1, i+1);
-	}
-	// OTF: create all streams
-	for (i=0; i<profiler_num_workers; i++) {
-		OTF_Writer_getStream(myWriter, i+1);
-	}
-	// OTF: register processes
-	for (i=0; i<profiler_num_workers; i++) {
-		char * worker_name = (char *) malloc(20 * sizeof(char));
-		sprintf(worker_name, "Worker thread %d", i);
-		profiler_otf_errno = OTF_Writer_writeDefProcess(myWriter, i+1, i+1, worker_name, 0);
-		assert(profiler_otf_errno);
-	}
-
-	// OTF: initialize second OTF trace
-	profiler_function_init();
+	// OTF: initialize OTF traces
+	profiler_libins_init();
+	profiler_appins_init();
 
 #endif /*PROFILER_ON*/
 }
 
 void profiler_init_worker(int worker) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+	/* PROFILER_OFF */
 	if (profiler_off) return;
 
 	// OTF: write event BeginProcess
-	unsigned long long time = profiler_get_curtime();
-	//printf("worker %d is about to writeBeginProcess.\n", worker);
-	profiler_otf_errno = OTF_Writer_writeBeginProcess(myWriter, time, worker + 1);
-	assert(profiler_otf_errno);
+	profiler_time_t time = profiler_get_curtime();
+	if (myWriter) {
+		profiler_otf_errno = OTF_Writer_writeBeginProcess(myWriter, time, worker + 1);
+		assert(profiler_otf_errno);
+	}
+	if (profiler_otf_writer) {
+		profiler_otf_errno = OTF_Writer_writeBeginProcess(profiler_otf_writer, time, worker + 1);
+		assert(profiler_otf_errno);
+	}
 
 	// Ant: [PAPI] register this worker thread
 	if (worker != 0 && profiler_num_papi_events > 0) {
@@ -510,9 +429,8 @@ void profiler_init_worker(int worker) {
 
 void profiler_fini() {
 #ifdef PROFILER_ON
-	// PROFILER OFF
-	if (profiler_off)
-		return ;
+	/* PROFILER_OFF */
+	if (profiler_off) return;
 
 	// Destroy overview file lock
 	myth_internal_lock_destroy(profiler_lock_fp_overview);
@@ -521,19 +439,16 @@ void profiler_fini() {
 	// Close overview file
 	fclose(profiler_fp_overview);
 
-	// OTF: finalize
-	OTF_Writer_close(myWriter);
-	OTF_FileManager_close(myManager);
-
-	// OTF: initialize second OTF trace
-	profiler_function_fini();
+	// OTF: terminate OTF traces
+	profiler_libins_fini();
+	profiler_appins_fini();
 
 #endif /*PROFILER_ON*/
 }
 
 void profiler_fini_worker(int worker) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+	/* PROFILER_OFF */
 	if (profiler_off) return;
 
 	// Write data to file
@@ -555,17 +470,36 @@ void profiler_fini_worker(int worker) {
 	}
 
 	// OTF: write event EndProcess
-	profiler_otf_errno = OTF_Writer_writeEndProcess(myWriter, profiler_get_curtime(), worker + 1);
-	assert(profiler_otf_errno);
+	if (myWriter) {
+		profiler_otf_errno = OTF_Writer_writeEndProcess(myWriter, profiler_get_curtime(), worker + 1);
+		assert(profiler_otf_errno);
+	}
+	if (profiler_otf_writer) {
+		profiler_otf_errno = OTF_Writer_writeEndProcess(profiler_otf_writer, profiler_get_curtime(), worker + 1);
+		assert(profiler_otf_errno);
+	}
 #endif /*PROFILER_ON*/
 }
 
+void profiler_write_to_file(int worker) {
+#ifdef PROFILER_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+
+	profiler_libins_write_to_file(worker);
+	profiler_appins_write_to_file(worker);
+
+#endif /*PROFILER_ON*/
+}
+
+
 profiler_task_node_t profiler_create_root_node(int worker) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER OFF */
 	if (profiler_off) return NULL;
-
-	if (PROFILER_RUNTIME_INSTRUMENT_OFF) return NULL;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return NULL;
 
 	// Allocate memory
 	profiler_task_node_t new_node;
@@ -599,15 +533,19 @@ profiler_task_node_t profiler_create_root_node(int worker) {
 	return new_node;
 #else
 	return NULL;
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
+#else
+	return NULL;
 #endif /*PROFILER_ON*/
 }
 
 profiler_task_node_t profiler_create_new_node(profiler_task_node_t parent, int worker, int level) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
-
-	if (PROFILER_RUNTIME_INSTRUMENT_OFF) return NULL;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return NULL;
 
 	// Out of profiling limit
 	if (parent == NULL || parent->level == profiler_depth_limit)
@@ -653,39 +591,7 @@ profiler_task_node_t profiler_create_new_node(profiler_task_node_t parent, int w
 	return new_node;
 #else
 	return NULL;
-#endif /*PROFILER_ON*/
-}
-
-//void profiler_delete_task_node(profiler_task_node_t node) {
-//#ifdef PROFILER_ON
-//	if (node != NULL)
-//		profiler_free_task_node(node->worker, node);
-//#endif /*PROFILER_ON*/
-//}
-
-profiler_time_record_t profiler_create_time_record(int type, int worker, double time) {
-#ifdef PROFILER_ON
-	// PROFILER OFF
-	if (profiler_off) return NULL;
-
-	// Allocate memory
-	profiler_time_record_t record;
-	record = profiler_malloc_time_record(worker);
-
-	// Set up fields
-	record->type = type;
-	record->task_index = 0;
-	record->time = time;
-	record->scl = 0;
-	record->values = profiler_malloc_long_long_array(worker);
-	int i;
-	for (i=0; i<profiler_num_papi_events; i++) {
-		record->values[i] = 0;
-	}
-	record->next = NULL;
-
-	// Return
-	return record;
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #else
 	return NULL;
 #endif /*PROFILER_ON*/
@@ -693,10 +599,11 @@ profiler_time_record_t profiler_create_time_record(int type, int worker, double 
 
 void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
 	if (profiler_off) return;
-
-	if (PROFILER_RUNTIME_INSTRUMENT_OFF) return;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return;
 
 	myth_thread_t thread = (myth_thread_t) thread_t;
 	profiler_task_node_t node = thread->node;
@@ -744,15 +651,17 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 	// Measurement data limitation (must be after record data assignment)
 	if (profiler_check_memory_usage() == 0)
 		profiler_write_to_file(worker);
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
 void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
 	if (profiler_off) return;
-
-	if (PROFILER_RUNTIME_INSTRUMENT_OFF) return;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return;
 
 	myth_thread_t thread = (myth_thread_t) thread_t;
 	profiler_task_node_t node = thread->node;
@@ -764,7 +673,7 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 
 	//TODO: Must be at the begining
 	// Time
-	unsigned long long time = profiler_get_curtime();
+	profiler_time_t time = profiler_get_curtime();
 
 	// Get environment
 	myth_running_env_t env;
@@ -800,16 +709,49 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	// Measurement data limitation (must be after record data assignment)
 	if (profiler_check_memory_usage() == 0)
 		profiler_write_to_file(worker);
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
-void profiler_write_to_file(int worker) {
+
+void profiler_libins_init() {
 #ifdef PROFILER_ON
-	// PROFILER OFF
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
 	if (profiler_off) return;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return;
+
+	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 ) * sizeof(char) );
+	sprintf(trace_file_name, "tsprof/%s_lib", profiler_trace_name);
+	profiler_otf_init(&myManager, &myWriter, trace_file_name);
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
+#endif /*PROFILER_ON*/
+}
+
+void profiler_libins_fini() {
+#ifdef PROFILER_ON
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return;
+
+	profiler_otf_fini(&myManager, &myWriter);
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
+#endif /*PROFILER_ON*/
+}
+
+void profiler_libins_write_to_file(int worker) {
+#ifdef PROFILER_ON
+#ifdef PROFILER_LIB_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_LIB_INS_OFF */
+	if (profiler_lib_ins_off) return;
 
 	// Get start time
-	unsigned long long start_time = profiler_get_curtime();
+	profiler_time_t start_time = profiler_get_curtime();
 
 	// Get environment
 	myth_running_env_t env = &g_envs[worker];
@@ -982,12 +924,12 @@ void profiler_write_to_file(int worker) {
 					// Write Enter and Leave records
 					profiler_otf_errno = OTF_Writer_writeEnterKV(myWriter, start_record->time, start_record->task_index, worker+1, start_record->scl, kvlist);
 					if (profiler_otf_errno == 0) {
-						printf("%d: Errorrrrrrrrrrrrrrrrrrrr\n%s\n%lld\n", worker, otf_strerr, start_record->time);
+						printf("%d: Errorrrrrrrrrrrrrrrrrrrr\n%s\n%llu\n", worker, otf_strerr, start_record->time);
 						assert(profiler_otf_errno);
 					}
 					profiler_otf_errno = OTF_Writer_writeLeaveKV(myWriter, stop_record->time, stop_record->task_index, worker+1, stop_record->scl, kvlist2);
 					if (profiler_otf_errno == 0) {
-						printf("%d: Errorrrrr\n%s\n%lld\n", worker, otf_strerr, stop_record->time);
+						printf("%d: Errorrrrr\n%s\n%llu\n", worker, otf_strerr, stop_record->time);
 						assert(profiler_otf_errno);
 					}
 					num_records_written += 2;
@@ -1011,86 +953,84 @@ void profiler_write_to_file(int worker) {
 
 
 	// Get stop time
-	unsigned long long stop_time = profiler_get_curtime();
+	profiler_time_t stop_time = profiler_get_curtime();
 
 	// Output period info
 	myth_internal_lock_lock(profiler_lock_fp_overview);
-	fprintf(profiler_fp_overview, "\nprofiler_write_to_file()\n");
-	fprintf(profiler_fp_overview, "%lld\n", start_time);
+	fprintf(profiler_fp_overview, "\nprofiler_libins_write_to_file()\n");
 	fprintf(profiler_fp_overview, "worker: %d\n", worker);
-	fprintf(profiler_fp_overview, "number of time records: %d/%d\n", num_records_written, num_records);
-	fprintf(profiler_fp_overview, "number of nodes deleted: %d/%d\n", num_nodes_written, num_nodes);
-	fprintf(profiler_fp_overview, "%lld\n\n", stop_time);
+	fprintf(profiler_fp_overview, "number of time records (written/total): %d/%d\n", num_records_written, num_records);
+	fprintf(profiler_fp_overview, "number of nodes (deleted/total): %d/%d\n", num_nodes_written, num_nodes);
+	fprintf(profiler_fp_overview, "from: %llu\n", start_time);
+	fprintf(profiler_fp_overview, "to  : %llu\n", stop_time);
+	fprintf(profiler_fp_overview, "Time cost: %llu\n", stop_time-start_time);
 	myth_internal_lock_unlock(profiler_lock_fp_overview);
 
-	// Call profiler_function_write()
-	profiler_function_write();
-
+#endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
-void profiler_otf_init() {
+
+void profiler_otf_init(OTF_FileManager **manager, OTF_Writer **writer, char * trace_name) {
 	// OTF: initialize
-	profiler_otf_manager = OTF_FileManager_open(100);
-	assert(profiler_otf_manager);
-	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 )* sizeof(char) );
-	sprintf(trace_file_name, "tsprof/%s_app", profiler_trace_name);
-	profiler_otf_writer = OTF_Writer_open(trace_file_name, profiler_num_workers, profiler_otf_manager);
-	assert(profiler_otf_writer);
-	profiler_otf_errno = OTF_Writer_writeDefTimerResolution(profiler_otf_writer, 0, 1000000);
+	*manager = OTF_FileManager_open(100);
+	assert(*manager);
+	*writer = OTF_Writer_open(trace_name, profiler_num_workers, *manager);
+	assert(*writer);
+	profiler_otf_errno = OTF_Writer_writeDefTimerResolution(*writer, 0, 1000000);
 	assert(profiler_otf_errno);
 
 	int i;
 
 	// OTF: register DefKeyValue
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_OFF, OTF_INT32, "profiler_off", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_OFF, OTF_INT32, "profiler_off", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_NUM_WORKERS, OTF_INT32, "profiler_num_workers", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_NUM_WORKERS, OTF_INT32, "profiler_num_workers", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_MEM_SIZE_LIMIT, OTF_INT32, "profiler_mem_size_limit", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_MEM_SIZE_LIMIT, OTF_INT32, "profiler_mem_size_limit", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_DEPTH_LIMIT, OTF_INT32, "profiler_depth_limit", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_DEPTH_LIMIT, OTF_INT32, "profiler_depth_limit", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_NUM_PAPI_EVENTS, OTF_INT32, "profiler_num_papi_events", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_NUM_PAPI_EVENTS, OTF_INT32, "profiler_num_papi_events", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_WATCH_FROM, OTF_INT32, "profiler_watch_from", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_WATCH_FROM, OTF_INT32, "profiler_watch_from", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_WATCH_TO, OTF_INT32, "profiler_watch_to", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_WATCH_TO, OTF_INT32, "profiler_watch_to", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_WATCH_MODE, OTF_INT32, "profiler_watch_mode", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_WATCH_MODE, OTF_INT32, "profiler_watch_mode", NULL);
 	assert(profiler_otf_errno);
 	for (i=0; i<profiler_num_papi_events; i++) {
-		profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_PAPI_EVENT_1+i, OTF_UINT64, "papi_event_i", papi_event_names[i]);
+		profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_PAPI_EVENT_1+i, OTF_UINT64, "papi_event_i", papi_event_names[i]);
 		assert(profiler_otf_errno);
 	}
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_TASK_LEVEL, OTF_INT32, "task level", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_TASK_LEVEL, OTF_INT32, "task level", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_TASK_TREE_PATH, OTF_BYTE_ARRAY, "task tree path", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_TASK_TREE_PATH, OTF_BYTE_ARRAY, "task tree path", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_TIME_RECORD_TYPE, OTF_INT32, "time record type", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_TIME_RECORD_TYPE, OTF_INT32, "time record type", NULL);
 	assert(profiler_otf_errno);
 
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_START_FUNCTION, OTF_INT32, "start function", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_START_FUNCTION, OTF_INT32, "start function", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_START_SOURCE, OTF_INT32, "start source", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_START_SOURCE, OTF_INT32, "start source", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_START_TIME_RECORD_TYPE, OTF_INT32, "start time record type", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_START_TIME_RECORD_TYPE, OTF_INT32, "start time record type", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_STOP_FUNCTION, OTF_INT32, "stop function", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_STOP_FUNCTION, OTF_INT32, "stop function", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_STOP_SOURCE, OTF_INT32, "stop source", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_STOP_SOURCE, OTF_INT32, "stop source", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_STOP_TIME_RECORD_TYPE, OTF_INT32, "stop time record type", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_STOP_TIME_RECORD_TYPE, OTF_INT32, "stop time record type", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other time record types", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other time record types", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_START_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other start time record types", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_START_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other start time record types", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_STOP_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other stop time record types", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_STOP_OTHER_TIME_RECORD_TYPES, OTF_BYTE_ARRAY, "other stop time record types", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_FILE_NAME, OTF_BYTE_ARRAY, "file name", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_FILE_NAME, OTF_BYTE_ARRAY, "file name", NULL);
 	assert(profiler_otf_errno);
-	profiler_otf_errno = OTF_Writer_writeDefKeyValue(profiler_otf_writer, 0, KEY_PROFILER_LINE_NUMBER, OTF_INT32, "line number", NULL);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_LINE_NUMBER, OTF_INT32, "line number", NULL);
 	assert(profiler_otf_errno);
 
 	// OTF: write KeyValue
@@ -1119,108 +1059,84 @@ void profiler_otf_init() {
 	}
 
 	// OTF: write a NoOpKV event
-	profiler_otf_errno = OTF_Writer_writeDefinitionCommentKV(profiler_otf_writer, 0, "Overview information", kvlist);
+	profiler_otf_errno = OTF_Writer_writeDefinitionCommentKV(*writer, 0, "Overview information", kvlist);
 	assert(profiler_otf_errno);
 
 	// OTF: create MasterControl entries for all processes
-	OTF_MasterControl * mc = OTF_Writer_getMasterControl(profiler_otf_writer);
+	OTF_MasterControl * mc = OTF_Writer_getMasterControl(*writer);
 	for (i=0; i<profiler_num_workers; i++) {
 		OTF_MasterControl_append(mc, i+1, i+1);
 	}
-	// OTF: create all streams
+	// OTF: force creating all streams
 	for (i=0; i<profiler_num_workers; i++) {
-		OTF_Writer_getStream(profiler_otf_writer, i+1);
+		OTF_Writer_getStream(*writer, i+1);
 	}
 	// OTF: register processes
 	for (i=0; i<profiler_num_workers; i++) {
 		char * worker_name = (char *) malloc(20 * sizeof(char));
 		sprintf(worker_name, "Worker thread %d", i);
-		profiler_otf_errno = OTF_Writer_writeDefProcess(profiler_otf_writer, i+1, i+1, worker_name, 0);
+		profiler_otf_errno = OTF_Writer_writeDefProcess(*writer, i+1, i+1, worker_name, 0);
 		assert(profiler_otf_errno);
 	}
 }
 
-void profiler_otf_fini() {
+void profiler_otf_fini(OTF_FileManager **manager, OTF_Writer **writer) {
 	// OTF: finalize
-	OTF_Writer_close(profiler_otf_writer);
-	OTF_FileManager_close(profiler_otf_manager);
+	OTF_Writer_close(*writer);
+	OTF_FileManager_close(*manager);
 }
 
-void profiler_function_init() {
+
+void profiler_appins_init() {
 #ifdef PROFILER_ON
-	profiler_otf_init();
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return;
+
+	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 ) * sizeof(char) );
+	sprintf(trace_file_name, "tsprof/%s_app", profiler_trace_name);
+	profiler_otf_init(&profiler_otf_manager, &profiler_otf_writer, trace_file_name);
+
+#endif /*PROFILER_APP_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
-void profiler_function_fini() {
+void profiler_appins_fini() {
 #ifdef PROFILER_ON
-	profiler_otf_fini();
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return;
+
+	profiler_otf_fini(&profiler_otf_manager, &profiler_otf_writer);
+
+#endif /*PROFILER_APP_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
-void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code) {
+void profiler_appins_write_to_file(int worker) {
 #ifdef PROFILER_ON
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return;
+
+	// Get start time
+	profiler_time_t start_time = profiler_get_curtime();
+
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
-
-	// Get current worker thread
-	int worker = env->rank;
-
-	// Measurement data limitation (must be after record data assignment)
-	if (profiler_check_memory_usage() == 0)
-		profiler_write_to_file(worker);
-
-	// Allocate memory
-	profiler_function_record_t new_record;
-	new_record = profiler_malloc_function_record(worker);
-
-	// Attach to env's time record list
-	if (env->num_function_records == 0) {
-		env->head_fr = new_record;
-		env->tail_fr = new_record;
-	} else {
-		//assert(env->tail != NULL);
-		env->tail_fr->next = new_record;
-		env->tail_fr = new_record;
-	}
-	env->num_function_records++;
-
-	// Set up fields
-	new_record->type = code;
-	new_record->file = filename;
-	new_record->line = line;
-	new_record->level = level;
-	new_record->tree_path = tree_path;
-	new_record->next = NULL;
-	new_record->time = profiler_get_curtime();
-	new_record->values = profiler_malloc_long_long_array(worker);
-
-	// Counter values
-	if (profiler_num_papi_events > 0) {
-		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
-			profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-		int i;
-		for (i=0; i<profiler_num_papi_events; i++)
-			new_record->values[i] = g_envs[worker].values[i];
-	}
-#endif /*PROFILER_ON*/
-}
-
-void profiler_function_write() {
-#ifdef PROFILER_ON
-	// Get environment
-	myth_running_env_t env;
-	env = myth_get_current_env();
-
-	// Get current worker thread
-	int worker = env->rank;
 
 	// Write function_records
 	profiler_function_record_t record = env->head_fr;
 	profiler_function_record_t record_t;
 	int num_records_written = 0;
-	//int num_records = env->num_function_records;
+	int num_records = env->num_function_records;
 	while (record != NULL) {
 		// Get element
 		record_t = record->next;
@@ -1262,15 +1178,100 @@ void profiler_function_write() {
 	env->tail_fr = NULL;
 	env->num_function_records = 0;
 	//fprintf(stderr, "profiler_function_write(): %d out of %d\n", num_records_written, num_records);
+
+	// Get stop time
+	profiler_time_t stop_time = profiler_get_curtime();
+
+	// Output period info
+	myth_internal_lock_lock(profiler_lock_fp_overview);
+	fprintf(profiler_fp_overview, "\nprofiler_appins_write_to_file()\n");
+	fprintf(profiler_fp_overview, "worker: %d\n", worker);
+	fprintf(profiler_fp_overview, "number of function records (written/total): %d/%d\n", num_records_written, num_records);
+	fprintf(profiler_fp_overview, "from: %llu\n", start_time);
+	fprintf(profiler_fp_overview, "to  : %llu\n", stop_time);
+	fprintf(profiler_fp_overview, "Time cost: %llu\n", stop_time-start_time);
+	myth_internal_lock_unlock(profiler_lock_fp_overview);
+
+#endif /*PROFILER_APP_INSTRUMENT_ON*/
+#endif /*PROFILER_ON*/
+}
+
+void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code) {
+#ifdef PROFILER_ON
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return;
+
+	// Get environment
+	myth_running_env_t env;
+	env = myth_get_current_env();
+
+	// Get current worker thread
+	int worker = env->rank;
+
+	// Measurement data limitation (must be after record data assignment)
+	if (profiler_check_memory_usage() == 0)
+		profiler_write_to_file(worker);
+
+	// Allocate memory
+	profiler_function_record_t new_record;
+	new_record = profiler_malloc_function_record(worker);
+
+	// Attach to env's time record list
+	if (env->num_function_records == 0) {
+		env->head_fr = new_record;
+		env->tail_fr = new_record;
+	} else {
+		//assert(env->tail != NULL);
+		env->tail_fr->next = new_record;
+		env->tail_fr = new_record;
+	}
+	env->num_function_records++;
+
+	// Set up fields
+	new_record->type = code;
+	new_record->file = filename;
+	new_record->line = line;
+	new_record->level = level;
+	new_record->tree_path = tree_path;
+	new_record->next = NULL;
+	new_record->time = profiler_get_curtime();
+	int i;
+	for (i=0; i<profiler_num_papi_events; i++) {
+		new_record->values[i] = 0;
+	}
+
+	// Counter values
+	if (profiler_num_papi_events > 0) {
+		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+			profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+		int i;
+		for (i=0; i<profiler_num_papi_events; i++)
+			new_record->values[i] = g_envs[worker].values[i];
+	}
+
+#endif /*PROFILER_APP_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
 
 char * profiler_function_create_tree_path(char * tree_path, int next_value) {
 #ifdef PROFILER_ON
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return NULL;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return NULL;
+
 	int length = strlen(tree_path) + 4;
 	char * new_tree_path = (char *) malloc(length * sizeof(char));
 	sprintf(new_tree_path, "%s_%d", tree_path, next_value);
 	return new_tree_path;
+
+#else
+	return NULL;
+#endif /*PROFILER_APP_INSTRUMENT_ON*/
 #else
 	return NULL;
 #endif /*PROFILER_ON*/

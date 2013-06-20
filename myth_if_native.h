@@ -112,7 +112,7 @@ myth_thread_t myth_schedapi_runqueue_peek(int victim);
 int myth_schedapi_rand(void);
 int myth_schedapi_rand2(int min,int max);
 
-// Profiler API
+// Ant: Profiler API for application instrumentation
 void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code);
 char * profiler_function_create_tree_path(char * tree_path, int next_value);
 
