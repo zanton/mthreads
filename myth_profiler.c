@@ -427,25 +427,6 @@ void profiler_init_worker(int worker) {
 #endif /*PROFILER_ON*/
 }
 
-void profiler_fini() {
-#ifdef PROFILER_ON
-	/* PROFILER_OFF */
-	if (profiler_off) return;
-
-	// Destroy overview file lock
-	myth_internal_lock_destroy(profiler_lock_fp_overview);
-	//free(profiler_lock_fp_overview);
-
-	// Close overview file
-	fclose(profiler_fp_overview);
-
-	// OTF: terminate OTF traces
-	profiler_libins_fini();
-	profiler_appins_fini();
-
-#endif /*PROFILER_ON*/
-}
-
 void profiler_fini_worker(int worker) {
 #ifdef PROFILER_ON
 	/* PROFILER_OFF */
@@ -478,6 +459,25 @@ void profiler_fini_worker(int worker) {
 		profiler_otf_errno = OTF_Writer_writeEndProcess(profiler_otf_writer, profiler_get_curtime(), worker + 1);
 		assert(profiler_otf_errno);
 	}
+#endif /*PROFILER_ON*/
+}
+
+void profiler_fini() {
+#ifdef PROFILER_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return;
+
+	// Destroy overview file lock
+	myth_internal_lock_destroy(profiler_lock_fp_overview);
+	//free(profiler_lock_fp_overview);
+
+	// Close overview file
+	fclose(profiler_fp_overview);
+
+	// OTF: terminate OTF traces
+	profiler_libins_fini();
+	profiler_appins_fini();
+
 #endif /*PROFILER_ON*/
 }
 
@@ -605,6 +605,10 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
+	if (!thread_t) {
+		fprintf(stderr, "Error: profiler_add_time_start(): argument thread_t=NULL\n");
+		return;
+	}
 	myth_thread_t thread = (myth_thread_t) thread_t;
 	profiler_task_node_t node = thread->node;
 
@@ -663,6 +667,10 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
+	if (!thread_t) {
+		fprintf(stderr, "Error: profiler_add_time_stop(): argument thread_t=NULL\n");
+		return;
+	}
 	myth_thread_t thread = (myth_thread_t) thread_t;
 	profiler_task_node_t node = thread->node;
 
@@ -722,7 +730,7 @@ void profiler_libins_init() {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
-	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 ) * sizeof(char) );
+	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 15 ) * sizeof(char) );
 	sprintf(trace_file_name, "tsprof/%s_lib", profiler_trace_name);
 	profiler_otf_init(&myManager, &myWriter, trace_file_name);
 #endif /*PROFILER_LIB_INSTRUMENT_ON*/
@@ -1095,7 +1103,7 @@ void profiler_appins_init() {
 	/* PROFILER_APP_INS_OFF */
 	if (profiler_app_ins_off) return;
 
-	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 11 ) * sizeof(char) );
+	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 15 ) * sizeof(char) );
 	sprintf(trace_file_name, "tsprof/%s_app", profiler_trace_name);
 	profiler_otf_init(&profiler_otf_manager, &profiler_otf_writer, trace_file_name);
 
@@ -1164,7 +1172,7 @@ void profiler_appins_write_to_file(int worker) {
 		profiler_otf_errno = OTF_Writer_writeCounterKV(profiler_otf_writer, record->time, worker+1, record->type, counter, kvlist);
 		//assert(profiler_otf_errno);
 		if (profiler_otf_errno != 1) {
-			printf("OTF Error at %s:%d:\n%s\nType=%d\nWorker=%d\n", __FILE__, __LINE__, otf_strerr, record->type, worker);
+			printf("OTF Error at %s:%d:\n%sType=%d\nWorker=%d\n\n", __FILE__, __LINE__, otf_strerr, record->type, worker);
 			//assert(profiler_otf_errno);
 		}
 
@@ -1204,6 +1212,11 @@ void profiler_function_instrument(int level, char * tree_path, char * filename, 
 	/* PROFILER_APP_INS_OFF */
 	if (profiler_app_ins_off) return;
 
+	// Get time
+	profiler_time_t time = 0;
+	if (code % 2 == 1)
+		time = profiler_get_curtime();
+
 	// Get environment
 	myth_running_env_t env;
 	env = myth_get_current_env();
@@ -1237,7 +1250,6 @@ void profiler_function_instrument(int level, char * tree_path, char * filename, 
 	new_record->level = level;
 	new_record->tree_path = tree_path;
 	new_record->next = NULL;
-	new_record->time = profiler_get_curtime();
 	int i;
 	for (i=0; i<profiler_num_papi_events; i++) {
 		new_record->values[i] = 0;
@@ -1251,6 +1263,12 @@ void profiler_function_instrument(int level, char * tree_path, char * filename, 
 		for (i=0; i<profiler_num_papi_events; i++)
 			new_record->values[i] = g_envs[worker].values[i];
 	}
+
+	// Get time
+	if (code % 2 == 0)
+		time = profiler_get_curtime();
+	// Assign time
+	new_record->time = time;
 
 #endif /*PROFILER_APP_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/

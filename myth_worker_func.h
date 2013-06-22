@@ -315,7 +315,6 @@ static inline void myth_startpoint_init_ex_body(int rank)
 	// Ant: [prof] [myth_startpoint_init_ex_body] set task_node for root task
 	this_th->node = profiler_create_root_node();
 	this_th->level = 0;
-
 	// Ant: [record time] [o18] task 0 stops (sched begins), myth_startpoint_init_ex_body()
 	profiler_add_time_stop(this_th, env->rank, 18);
 #endif /*PROFILER_ON*/
@@ -408,6 +407,7 @@ static inline void *myth_worker_thread_fn(void *args)
 		//setup as a worker
 		myth_worker_start_ex_body(rank);
 	}
+
 	return NULL;
 }
 
