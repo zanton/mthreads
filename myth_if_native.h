@@ -112,8 +112,39 @@ myth_thread_t myth_schedapi_runqueue_peek(int victim);
 int myth_schedapi_rand(void);
 int myth_schedapi_rand2(int min,int max);
 
+
 // Ant: Profiler API for application instrumentation
-void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code);
-char * profiler_function_create_tree_path(char * tree_path, int next_value);
+
+// Instrumentation codes
+#define PROFILER_APPINS_BEGIN 0
+#define PROFILER_APPINS_SPAWN 1
+#define PROFILER_APPINS_SYNC 2
+#define PROFILER_APPINS_END 3
+#define PROFILER_APPINS_RESUME 4
+#define PROFILER_APPINS_PAUSE 5
+
+// API
+void * profiler_appins_begin(const char *file, const char *function, void *parent_node, char spawn_index, int line);
+char profiler_appins_instrument(void * node_void, int line, int inscode, ...);
+
+// Macro
+#define profiler_task_begin(parent_node, spawn_index)\
+		profiler_appins_begin(__FILE__, __FUNCTION__, parent_node, spawn_index, __LINE__)
+
+#define profiler_task_spawn(node_ptr)\
+		profiler_appins_instrument(node_ptr, __LINE__, PROFILER_APPINS_SPAWN)
+
+#define profiler_task_sync(node_ptr, ...)\
+		profiler_appins_instrument(node_ptr, __LINE__, PROFILER_APPINS_SYNC, ##__VA_ARGS__)
+
+#define profiler_task_end(node_ptr)\
+		profiler_appins_instrument(node_ptr, __LINE__, PROFILER_APPINS_END)
+
+#define profiler_task_resume(node_ptr)\
+		profiler_appins_instrument(node_ptr, __LINE__, PROFILER_APPINS_RESUME)
+
+#define profiler_task_pause(node_ptr)\
+		profiler_appins_instrument(node_ptr, __LINE__, PROFILER_APPINS_PAUSE)
+
 
 #endif /* MYTH_IF_NATIVE_H_ */

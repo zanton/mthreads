@@ -26,8 +26,9 @@ typedef struct myth_running_env
 	int num_task_nodes;
 	profiler_task_node_t head_node, tail_node;
 
-	int num_function_records;
-	profiler_function_record_t head_fr, tail_fr;
+	int num_appins_records;
+	profiler_appins_time_record_t head_ar, tail_ar;
+	int num_appins_nodes;
 
 #ifdef PROFILER_OBSERVE_SUBTREE
 	time_record_t subtree_start, subtree_stop;

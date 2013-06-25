@@ -6,6 +6,7 @@
  */
 
 #include <sys/stat.h>
+#include <stdarg.h>
 #include "myth_profiler.h"
 #include "myth_worker.h"
 #include "myth_desc.h"
@@ -45,6 +46,14 @@
 
 #define KEY_PROFILER_FILE_NAME 25
 #define KEY_PROFILER_LINE_NUMBER 26
+#define KEY_PROFILER_FUNCTION 27
+#define KEY_PROFILER_NUM_SUBTASKS 28
+#define KEY_PROFILER_SPAWN_INDEX 29
+#define KEY_PROFILER_SYNC_TASK_1 30
+#define KEY_PROFILER_SYNC_TASK_2 31
+#define KEY_PROFILER_SYNC_TASK_3 32
+#define KEY_PROFILER_SYNC_TASK_4 33
+#define KEY_PROFILER_SYNC_TASK_5 34
 
 
 // For profiler
@@ -93,10 +102,10 @@ void profiler_libins_init();
 void profiler_libins_fini();
 void profiler_appins_init();
 void profiler_appins_fini();
-void profiler_function_instrument(int , char * , char * , int , int );
 void profiler_write_to_file(int );
 void profiler_libins_write_to_file(int );
 void profiler_appins_write_to_file(int );
+char profiler_appins_instrument(void * node, int line, int inscode, ...);
 
 profiler_time_t profiler_get_curtime()
 {
@@ -160,8 +169,9 @@ int profiler_check_memory_usage() {
 	env = myth_get_current_env();
 
 	unsigned int usage = env->num_task_nodes * sizeof(profiler_task_node) +
-							env->num_time_records * sizeof(profiler_time_record) +
-							env->num_function_records * sizeof(profiler_function_record);
+	  env->num_time_records * sizeof(profiler_time_record) +
+	  env->num_appins_records * sizeof(profiler_appins_time_record) +
+	  env->num_appins_nodes * sizeof(profiler_appins_task_node);
 	if (usage < profiler_mem_size_limit << 20)
 		return 1;
 	else
@@ -192,12 +202,23 @@ profiler_time_record_t profiler_malloc_time_record(int worker) {
 	return ret;
 }
 
-profiler_function_record_t profiler_malloc_function_record(int worker) {
+profiler_appins_task_node_t profiler_malloc_appins_task_node(int worker) {
 	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
-	profiler_function_record_t ret = NULL;
-	ret = myth_flmalloc(worker, sizeof(profiler_function_record));
+	profiler_appins_task_node_t ret = NULL;
+	ret = myth_flmalloc(worker, sizeof(profiler_appins_task_node));
+	//assert(ret != NULL);
+
+	return ret;
+}
+
+profiler_appins_time_record_t profiler_malloc_appins_time_record(int worker) {
+	/* PROFILER_OFF */
+	if (profiler_off) return NULL;
+
+	profiler_appins_time_record_t ret = NULL;
+	ret = myth_flmalloc(worker, sizeof(profiler_appins_time_record));
 	//assert(ret != NULL);
 
 	return ret;
@@ -215,14 +236,23 @@ void profiler_free_task_node(int worker, profiler_task_node_t node) {
 void profiler_free_time_record(int worker, profiler_time_record_t record) {
 #ifdef PROFILER_ON
 	assert(record);
-	myth_flfree(worker, sizeof(profiler_time_record), record);
+	myth_flfree(worker, sizeof(profiler_appins_time_record), record);
 #endif /*PROFILER_ON*/
 }
 
-void profiler_free_function_record(int worker, profiler_function_record_t record) {
+void profiler_free_appins_task_node(int worker, profiler_appins_task_node_t node) {
+#ifdef PROFILER_ON
+	assert(node);
+	if (node->tree_path)
+	  myth_flfree(worker, (strlen(node->tree_path)+1) * sizeof(char), node->tree_path);
+	myth_flfree(worker, sizeof(profiler_appins_task_node), node);
+#endif /*PROFILER_ON*/
+}
+
+void profiler_free_appins_time_record(int worker, profiler_appins_time_record_t record) {
 #ifdef PROFILER_ON
 	assert(record);
-	myth_flfree(worker, sizeof(profiler_function_record), record);
+	myth_flfree(worker, sizeof(profiler_appins_time_record), record);
 #endif /*PROFILER_ON*/
 }
 
@@ -407,9 +437,10 @@ void profiler_init_worker(int worker) {
 	g_envs[worker].head_node = NULL;
 	g_envs[worker].tail_node = NULL;
 	g_envs[worker].num_task_nodes = 0;
-	g_envs[worker].head_fr = NULL;
-	g_envs[worker].tail_fr = NULL;
-	g_envs[worker].num_function_records = 0;
+	g_envs[worker].head_ar = NULL;
+	g_envs[worker].tail_ar = NULL;
+	g_envs[worker].num_appins_records = 0;
+	g_envs[worker].num_appins_nodes = 0;
 
 	int i;
 
@@ -486,6 +517,7 @@ void profiler_write_to_file(int worker) {
 	/* PROFILER_OFF */
 	if (profiler_off) return;
 
+	fprintf(stderr, "profiler_write_to_file(worker=%d)\n", worker);
 	profiler_libins_write_to_file(worker);
 	profiler_appins_write_to_file(worker);
 
@@ -576,7 +608,7 @@ profiler_task_node_t profiler_create_new_node(profiler_task_node_t parent, int w
 
 	// Set up fields
 	parent->num_child_tasks++;
-	int length = strlen(parent->tree_path) + 4;
+	int length = strlen(parent->tree_path) + 5;
 	//printf("length=%d\n", length);
 	new_node->tree_path = (char *) myth_flmalloc(worker, length * sizeof(char));
 	sprintf(new_node->tree_path, "%s_%d", parent->tree_path, parent->num_child_tasks);
@@ -1040,6 +1072,16 @@ void profiler_otf_init(OTF_FileManager **manager, OTF_Writer **writer, char * tr
 	assert(profiler_otf_errno);
 	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_LINE_NUMBER, OTF_INT32, "line number", NULL);
 	assert(profiler_otf_errno);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_FUNCTION, OTF_BYTE_ARRAY, "function", NULL);
+	assert(profiler_otf_errno);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_NUM_SUBTASKS, OTF_INT32, "number of subtasks", NULL);
+	assert(profiler_otf_errno);
+	profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_SPAWN_INDEX, OTF_INT32, "spawn index", NULL);
+	assert(profiler_otf_errno);
+	for (i=0; i<MAX_LENGTH_SUBTASK_LIST; i++) {
+		profiler_otf_errno = OTF_Writer_writeDefKeyValue(*writer, 0, KEY_PROFILER_SYNC_TASK_1+i, OTF_INT32, "sync_task_i", NULL);
+		assert(profiler_otf_errno);
+	}
 
 	// OTF: write KeyValue
 	OTF_KeyValueList * kvlist;
@@ -1133,32 +1175,36 @@ void profiler_appins_write_to_file(int worker) {
 	/* PROFILER_APP_INS_OFF */
 	if (profiler_app_ins_off) return;
 
-	// Get start time
+	/* Get start time */
 	profiler_time_t start_time = profiler_get_curtime();
 
-	// Get environment
+	/* Get environment */
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	// Write function_records
-	profiler_function_record_t record = env->head_fr;
-	profiler_function_record_t record_t;
+	/* Write appins_records */
+	profiler_appins_time_record_t record = env->head_ar;
+	profiler_appins_time_record_t record_t;
 	int num_records_written = 0;
-	int num_records = env->num_function_records;
+	int num_records = env->num_appins_records;
+	int num_nodes_deleted = 0;
+	int num_nodes = env->num_appins_nodes;
 	while (record != NULL) {
 		// Get element
 		record_t = record->next;
-		// Create key-value list for function_record
+		// Create key-value list for appins_time_record
 		OTF_KeyValueList * kvlist;
 		kvlist = OTF_KeyValueList_new();
 		assert(kvlist);
 
 		// Append level, tree_path, file, line, counters
-		profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_TASK_LEVEL, record->level);
+		profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_TASK_LEVEL, record->node->level);
 		assert(profiler_otf_errno == 0);
-		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_TASK_TREE_PATH, (unsigned char *) record->tree_path, strlen(record->tree_path));
+		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_TASK_TREE_PATH, (unsigned char *) record->node->tree_path, strlen(record->node->tree_path));
 		assert(profiler_otf_errno == 0);
-		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_FILE_NAME, (unsigned char *) record->file, strlen(record->file));
+		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_FILE_NAME, (unsigned char *) record->node->file, strlen(record->node->file));
+		assert(profiler_otf_errno == 0);
+		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_FUNCTION, (unsigned char *) record->node->function, strlen(record->node->file));
 		assert(profiler_otf_errno == 0);
 		profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_LINE_NUMBER, record->line);
 		assert(profiler_otf_errno == 0);
@@ -1167,24 +1213,48 @@ void profiler_appins_write_to_file(int worker) {
 			profiler_otf_errno = OTF_KeyValueList_appendUint64(kvlist, KEY_PROFILER_PAPI_EVENT_1 + i, record->values[i]);
 			assert(profiler_otf_errno == 0);
 		}
-		// Write function_record
+		if (record->inscode == PROFILER_APPINS_SPAWN) {
+			profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_SPAWN_INDEX, record->subtask_list[0]);
+			assert(profiler_otf_errno == 0);
+		}
+		if (record->inscode == PROFILER_APPINS_SYNC) {
+			int num = record->subtask_list[0];
+			for (i=0; i<num; i++) {
+				profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_SYNC_TASK_1 + i, record->subtask_list[i+1]);
+				assert(profiler_otf_errno == 0);
+			}
+		}
+		if (record->inscode == PROFILER_APPINS_END) {
+			profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_NUM_SUBTASKS, record->node->subtask_count);
+			assert(profiler_otf_errno == 0);
+		}
+		// Write appins_time_record
 		unsigned int counter = (profiler_num_papi_events > 0)?record->values[0]:0;
-		profiler_otf_errno = OTF_Writer_writeCounterKV(profiler_otf_writer, record->time, worker+1, record->type, counter, kvlist);
+		profiler_otf_errno = OTF_Writer_writeCounterKV(profiler_otf_writer, record->time, worker+1, record->inscode, counter, kvlist);
 		//assert(profiler_otf_errno);
 		if (profiler_otf_errno != 1) {
-			printf("OTF Error at %s:%d:\n%sType=%d\nWorker=%d\n\n", __FILE__, __LINE__, otf_strerr, record->type, worker);
+			printf("OTF Error at %s:%d:\n%sInscode=%d\nWorker=%d\n\n", __FILE__, __LINE__, otf_strerr, record->inscode, worker);
 			//assert(profiler_otf_errno);
 		}
 
-		// Free memory
-		profiler_free_function_record(worker, record);
+		// Adjust task_node
+		record->node->record_count--;
+		if (record->node->record_count == 0 && record->node->ended) {
+			g_envs[record->node->worker].num_appins_nodes--;
+			profiler_free_appins_task_node(record->node->worker, record->node);
+			num_nodes_deleted++;
+		}
+
+		// Free time_record
+		profiler_free_appins_time_record(worker, record);
+
 		// Increment counter
 		num_records_written++;
 		record = record_t;
 	}
-	env->head_fr = NULL;
-	env->tail_fr = NULL;
-	env->num_function_records = 0;
+	env->head_ar = NULL;
+	env->tail_ar = NULL;
+	env->num_appins_records = 0;
 	//fprintf(stderr, "profiler_function_write(): %d out of %d\n", num_records_written, num_records);
 
 	// Get stop time
@@ -1194,7 +1264,9 @@ void profiler_appins_write_to_file(int worker) {
 	myth_internal_lock_lock(profiler_lock_fp_overview);
 	fprintf(profiler_fp_overview, "\nprofiler_appins_write_to_file()\n");
 	fprintf(profiler_fp_overview, "worker: %d\n", worker);
-	fprintf(profiler_fp_overview, "number of function records (written/total): %d/%d\n", num_records_written, num_records);
+	fprintf(profiler_fp_overview, "number of appins records (written/total): %d/%d\n", num_records_written, num_records);
+	fprintf(profiler_fp_overview, "number of deleted appins nodes (on various workers): %d\n", num_nodes_deleted);
+	fprintf(profiler_fp_overview, "number of appins nodes (of this worker): %d\n", num_nodes);
 	fprintf(profiler_fp_overview, "from: %llu\n", start_time);
 	fprintf(profiler_fp_overview, "to  : %llu\n", stop_time);
 	fprintf(profiler_fp_overview, "Time cost: %llu\n", stop_time-start_time);
@@ -1204,77 +1276,7 @@ void profiler_appins_write_to_file(int worker) {
 #endif /*PROFILER_ON*/
 }
 
-void profiler_function_instrument(int level, char * tree_path, char * filename, int line, int code) {
-#ifdef PROFILER_ON
-#ifdef PROFILER_APP_INSTRUMENT_ON
-	/* PROFILER_OFF */
-	if (profiler_off) return;
-	/* PROFILER_APP_INS_OFF */
-	if (profiler_app_ins_off) return;
-
-	// Get time
-	profiler_time_t time = 0;
-	if (code % 2 == 1)
-		time = profiler_get_curtime();
-
-	// Get environment
-	myth_running_env_t env;
-	env = myth_get_current_env();
-
-	// Get current worker thread
-	int worker = env->rank;
-
-	// Measurement data limitation (must be after record data assignment)
-	if (profiler_check_memory_usage() == 0)
-		profiler_write_to_file(worker);
-
-	// Allocate memory
-	profiler_function_record_t new_record;
-	new_record = profiler_malloc_function_record(worker);
-
-	// Attach to env's time record list
-	if (env->num_function_records == 0) {
-		env->head_fr = new_record;
-		env->tail_fr = new_record;
-	} else {
-		//assert(env->tail != NULL);
-		env->tail_fr->next = new_record;
-		env->tail_fr = new_record;
-	}
-	env->num_function_records++;
-
-	// Set up fields
-	new_record->type = code;
-	new_record->file = filename;
-	new_record->line = line;
-	new_record->level = level;
-	new_record->tree_path = tree_path;
-	new_record->next = NULL;
-	int i;
-	for (i=0; i<profiler_num_papi_events; i++) {
-		new_record->values[i] = 0;
-	}
-
-	// Counter values
-	if (profiler_num_papi_events > 0) {
-		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
-			profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-		int i;
-		for (i=0; i<profiler_num_papi_events; i++)
-			new_record->values[i] = g_envs[worker].values[i];
-	}
-
-	// Get time
-	if (code % 2 == 0)
-		time = profiler_get_curtime();
-	// Assign time
-	new_record->time = time;
-
-#endif /*PROFILER_APP_INSTRUMENT_ON*/
-#endif /*PROFILER_ON*/
-}
-
-char * profiler_function_create_tree_path(char * tree_path, int next_value) {
+char * profiler_appins_create_tree_path(int worker, char * tree_path, int next_value) {
 #ifdef PROFILER_ON
 #ifdef PROFILER_APP_INSTRUMENT_ON
 	/* PROFILER_OFF */
@@ -1282,8 +1284,8 @@ char * profiler_function_create_tree_path(char * tree_path, int next_value) {
 	/* PROFILER_APP_INS_OFF */
 	if (profiler_app_ins_off) return NULL;
 
-	int length = strlen(tree_path) + 4;
-	char * new_tree_path = (char *) malloc(length * sizeof(char));
+	int length = strlen(tree_path) + 5;
+	char * new_tree_path = (char *) myth_flmalloc(worker, length * sizeof(char));
 	sprintf(new_tree_path, "%s_%d", tree_path, next_value);
 	return new_tree_path;
 
@@ -1294,3 +1296,178 @@ char * profiler_function_create_tree_path(char * tree_path, int next_value) {
 	return NULL;
 #endif /*PROFILER_ON*/
 }
+
+void * profiler_appins_begin(const char *file, const char *function, void *parent_node_void, char spawn_index, int line) {
+#ifdef PROFILER_ON
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return NULL;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return NULL;
+	
+	/* Get environment */
+	myth_running_env_t env;
+	env = myth_get_current_env();
+
+	/* Get current worker thread */
+	int worker = env->rank;
+
+	/* Get parent level and tree path */
+	profiler_appins_task_node_t parent_node = (profiler_appins_task_node_t) parent_node_void;
+	int level = (parent_node==NULL)?1:(parent_node->level+1);
+	char * parent_tree_path = (parent_node==NULL)?"0":(parent_node->tree_path);
+
+	/* Allocate memory */
+	profiler_appins_task_node_t new_node;
+	new_node = profiler_malloc_appins_task_node(worker);
+
+	/* Increment env's appins node counter */
+	env->num_appins_nodes++;
+
+	/* Set fields */
+	new_node->file = (char *) myth_flmalloc(worker, (strlen(file)+1) * sizeof(char) );
+	strcpy(new_node->file, file);
+	new_node->function = (char *) myth_flmalloc(worker, (strlen(function)+1) * sizeof(char) );
+	strcpy(new_node->function, function);
+	new_node->level = level;
+	new_node->tree_path = profiler_appins_create_tree_path(worker, parent_tree_path, spawn_index);
+	new_node->worker = worker;
+	new_node->subtask_count = 0;
+	new_node->record_count = 0;
+	new_node->ended = 0;
+	
+	/* Call profiler_appins_instrument() for PROFILER_APPINS_BEGIN */
+	profiler_appins_instrument((void *) new_node, line, PROFILER_APPINS_BEGIN);
+
+	/* Return */
+	return (void *) new_node;
+
+#else
+	return NULL;
+#endif /* PROFILER_APP_INSTRUMENT_ON */
+#else
+	return NULL;
+#endif /* PROFILER_ON */
+}
+
+char profiler_appins_instrument(void * node_void, int line, int inscode, ...) {
+#ifdef PROFILER_ON
+#ifdef PROFILER_APP_INSTRUMENT_ON
+	/* PROFILER_OFF */
+	if (profiler_off) return -1;
+	/* PROFILER_APP_INS_OFF */
+	if (profiler_app_ins_off) return -1;
+
+	/* Return value */
+	char retval = -1;
+	
+	/* Get environment */
+	myth_running_env_t env;
+	env = myth_get_current_env();
+
+	/* Get current worker thread */
+	int worker = env->rank;
+
+	/* Get time, counter values */
+	profiler_time_t time = 0;
+	switch (inscode) {
+	case PROFILER_APPINS_SPAWN:
+	case PROFILER_APPINS_PAUSE:
+	case PROFILER_APPINS_END:
+	  // Time
+	  time = profiler_get_curtime();
+	  // Counter values
+	  if (profiler_num_papi_events > 0)
+		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+		  profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+	  // Break
+	  break;
+	}
+
+	/* Get task_node */
+	profiler_appins_task_node_t node = (profiler_appins_task_node_t) node_void;
+	
+	/* Measurement data limitation (must be after record data assignment) */
+	if (profiler_check_memory_usage() == 0)
+		profiler_write_to_file(worker);
+
+	/* Allocate memory */
+	profiler_appins_time_record_t new_record;
+	new_record = profiler_malloc_appins_time_record(worker);
+
+	/* Attach to env's time record list */
+	if (env->num_appins_records == 0) {
+		env->head_ar = new_record;
+		env->tail_ar = new_record;
+	} else {
+		//assert(env->tail != NULL);
+		env->tail_ar->next = new_record;
+		env->tail_ar = new_record;
+	}
+	env->num_appins_records++;
+
+	/* Set up fields */
+	new_record->line = line;
+	new_record->inscode = inscode;
+	new_record->node = node;
+	new_record->next = NULL;
+
+	/* Increment node's counter*/
+	node->record_count++;
+
+	/* Particular processes basing on inscode*/
+	switch (inscode) {
+	  va_list vargs;
+	case PROFILER_APPINS_SPAWN:
+	  retval = node->subtask_count++;
+	  new_record->subtask_list[0] = retval;
+	  break;
+	case PROFILER_APPINS_SYNC:
+	  va_start(vargs, inscode);
+	  int num = va_arg(vargs, int);
+	  if (num > MAX_LENGTH_SUBTASK_LIST) {
+		fprintf(stderr, "Error: num=%d > MAX_LENGTH_SUBTASK_LIST=%d\n", num, MAX_LENGTH_SUBTASK_LIST);
+		num = MAX_LENGTH_SUBTASK_LIST;
+	  }
+	  int i;
+	  char id;
+	  new_record->subtask_list[0] = num;
+	  for (i=1; i<num+1; i++) {
+		id = (char) va_arg(vargs, int);
+		new_record->subtask_list[i] = id;
+	  }
+	  va_end(vargs);
+	  break;
+	case PROFILER_APPINS_END:
+	  node->ended = 1;
+	  break;
+	}
+	
+	/* Get time, counter values */
+	switch (inscode) {
+	case PROFILER_APPINS_BEGIN:
+	case PROFILER_APPINS_RESUME:
+	case PROFILER_APPINS_SYNC:
+	  // Time
+	  time = profiler_get_curtime();
+	  // Counter values
+	  if (profiler_num_papi_events > 0)
+		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
+		  profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+	  // Break
+	  break;
+	}
+
+	/* Assign time, counter values */
+	new_record->time = time;
+	int i;
+	for (i=0; i<profiler_num_papi_events; i++)
+	  new_record->values[i] = g_envs[worker].values[i];
+
+	/* Return */
+	return retval;
+
+#endif /* PROFILER_APP_INSTRUMENT_ON */
+#endif /* PROFILER_ON */
+}
+

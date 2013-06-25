@@ -10,10 +10,10 @@
 
 // Preprocessor directives
 #define PROFILER_ON
-#define PROFILER_LIB_INSTRUMENT_ON
+//#define PROFILER_LIB_INSTRUMENT_ON
 #define PROFILER_APP_INSTRUMENT_ON
 
-// Ant: enviroment variables for profiler
+// Enviroment variables for profiler
 #define ENV_PROFILER_OFF "PROFILER_OFF"
 #define ENV_PROFILER_DEPTH_LIMIT "PROFILER_DEPTH_LIMIT"
 #define ENV_PROFILER_NUM_PAPI_EVENTS "PROFILER_NUM_PAPI_EVENTS"
@@ -26,14 +26,22 @@
 #define ENV_PROFILER_LIB_INSTRUMENT_OFF "PROFILER_LIB_INS_OFF"
 #define ENV_PROFILER_APP_INSTRUMENT_OFF "PROFILER_APP_INS_OFF"
 
+// Instrumentation codes
+#define PROFILER_APPINS_BEGIN 0
+#define PROFILER_APPINS_SPAWN 1
+#define PROFILER_APPINS_SYNC 2
+#define PROFILER_APPINS_END 3
+#define PROFILER_APPINS_RESUME 4
+#define PROFILER_APPINS_PAUSE 5
 
+// Profiler settings
 #define MAX_NUM_PAPI_EVENTS 4
 #define MAX_PAPI_EVENT_NAME_LENGTH 22
-
+#define MAX_LENGTH_SUBTASK_LIST 5
 #define DIR_FOR_PROF_DATA "./tsprof"
 #define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
-
 #define EACH_CORE_MEMORY_SIZE_LIMIT 300 // Megabytes
+#define profiler_time_t unsigned long long //uint64_t
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +50,6 @@
 #include <limits.h>
 #include "myth_misc.h"
 
-#define profiler_time_t unsigned long long //uint64_t
 
 typedef struct profiler_task_node {
 	unsigned int 	index; 				// Hash code
@@ -66,16 +73,28 @@ typedef struct profiler_time_record {
 	//int				worker;				// worker where its memory is allocated
 } profiler_time_record, *profiler_time_record_t;
 
-typedef struct profiler_function_record {
-	int 				type;
+
+typedef struct profiler_appins_task_node {
 	char * 				file;
-	int 				line;
+	char *				function;
 	int 				level;
 	char * 				tree_path;
-	profiler_time_t		time;
-	long long			values[MAX_NUM_PAPI_EVENTS];
-	struct profiler_function_record * next;
-} profiler_function_record, *profiler_function_record_t;
+	int					worker;
+	char				subtask_count;
+	int					record_count;
+	int					ended;
+} profiler_appins_task_node, *profiler_appins_task_node_t;
+
+typedef struct profiler_appins_time_record {
+	int 								line;
+	profiler_time_t						time;
+	long long							values[MAX_NUM_PAPI_EVENTS];
+	char								inscode;
+	char								subtask_list[MAX_LENGTH_SUBTASK_LIST+1];
+	profiler_appins_task_node_t			node;
+	struct profiler_appins_time_record * 	next;
+} profiler_appins_time_record, *profiler_appins_time_record_t;
+
 
 void 					profiler_init(int worker_thread_num);
 void					profiler_init_worker(int rank);
