@@ -29,7 +29,7 @@ typedef struct myth_thread
 
 #ifdef PROFILER_ON
 	// Ant: [prof] [struct myth_thread] pointer to a task_node
-	profiler_task_node_t node;
+	profiler_libins_task_node_t node;
 	char level;
 #endif /*PROFILER_ON*/
 

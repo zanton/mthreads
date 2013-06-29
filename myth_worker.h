@@ -17,23 +17,19 @@ typedef struct myth_running_env
 {
 
 #ifdef PROFILER_ON
-	//node_allocator node_mem;
-	//record_allocator record_mem;
+	// For PAPI observation
 	int EventSet;
 	long long * values;
-	int num_time_records;
-	profiler_time_record_t head, tail;
-	int num_task_nodes;
-	profiler_task_node_t head_node, tail_node;
 
+	// Library instrumentation
+	int num_libins_records;
+	profiler_libins_time_record_t head_lr, tail_lr;
+	int num_libins_nodes;
+
+	// Application instrumentation
 	int num_appins_records;
 	profiler_appins_time_record_t head_ar, tail_ar;
 	int num_appins_nodes;
-
-#ifdef PROFILER_OBSERVE_SUBTREE
-	time_record_t subtree_start, subtree_stop;
-#endif /*PROFILER_OBSERVE_SUBTREE*/
-
 #endif /*PROFILER_ON*/
 
 	//The following entries are only accessed from the owner

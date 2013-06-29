@@ -462,7 +462,7 @@ static inline myth_thread_t myth_create_body(myth_func_t func,
 #ifdef PROFILER_ON
 	// Ant: [prof] [myth_create_body] set task_node for new task
 	new_thread->level = this_thread->level + 1;
-	new_thread->node = (profiler_task_node_t) profiler_create_new_node(this_thread->node, env->rank, new_thread->level);
+	new_thread->node = (profiler_libins_task_node_t) profiler_create_new_node(this_thread->node);
 #endif /*PROFILER_ON*/
 
 #ifdef MYTH_CREATE_PROF_DETAIL

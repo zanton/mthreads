@@ -10,7 +10,7 @@
 
 // Preprocessor directives
 #define PROFILER_ON
-//#define PROFILER_LIB_INSTRUMENT_ON
+#define PROFILER_LIB_INSTRUMENT_ON
 #define PROFILER_APP_INSTRUMENT_ON
 
 // Enviroment variables for profiler
@@ -39,7 +39,6 @@
 #define MAX_PAPI_EVENT_NAME_LENGTH 22
 #define MAX_LENGTH_SUBTASK_LIST 5
 #define DIR_FOR_PROF_DATA "./tsprof"
-#define FILE_FOR_GENERAL_INFO "./tsprof/overview_info.txt"
 #define EACH_CORE_MEMORY_SIZE_LIMIT 300 // Megabytes
 #define profiler_time_t unsigned long long //uint64_t
 
@@ -51,27 +50,29 @@
 #include "myth_misc.h"
 
 
-typedef struct profiler_task_node {
+typedef struct profiler_libins_task_node {
 	unsigned int 	index; 				// Hash code
 	char * 			tree_path; 			// Generation tree path
 	int 			level; 				// Task's depth
 	char * 			function_name; 		// Function's name
 	int 			head_scl;			// head source code location
 	int				tail_scl; 			// tail source code location
-	int 			num_child_tasks;	// number of born child tasks
+	int				worker;				// worker where its memory is allocated
+	int 			subtask_count;	// number of born child tasks
+	int				record_count;
+	int 			ended;
 	struct profiler_task_node * next;	// pointer to next task_node
-	//int				worker;				// worker where its memory is allocated
-} profiler_task_node, *profiler_task_node_t;
+} profiler_libins_task_node, *profiler_libins_task_node_t;
 
-typedef struct profiler_time_record {
-	int 				type; 							// start or stop, what kind of start or stop
-	unsigned int 		task_index; 					// task's identifier
-	profiler_time_t		time; 							// at what time it happened
-	int 				scl; 							// source code location
-	long long 	 		values[MAX_NUM_PAPI_EVENTS];	// hardware counter values
-	struct profiler_time_record * next;	// pointer to next time_record
-	//int				worker;				// worker where its memory is allocated
-} profiler_time_record, *profiler_time_record_t;
+typedef struct profiler_libins_time_record {
+	int 									type; 							// start or stop, what kind of start or stop
+	unsigned int 							task_index; 					// task's identifier
+	profiler_time_t							time; 							// at what time it happened
+	int 									scl; 							// source code location
+	long long 	 							values[MAX_NUM_PAPI_EVENTS];	// hardware counter values
+	profiler_libins_task_node_t				node;
+	struct profiler_libins_time_record * 	next;	// pointer to next time_record
+} profiler_libins_time_record, *profiler_libins_time_record_t;
 
 
 typedef struct profiler_appins_task_node {
@@ -86,23 +87,23 @@ typedef struct profiler_appins_task_node {
 } profiler_appins_task_node, *profiler_appins_task_node_t;
 
 typedef struct profiler_appins_time_record {
-	int 								line;
-	profiler_time_t						time;
-	long long							values[MAX_NUM_PAPI_EVENTS];
-	char								inscode;
-	char								subtask_list[MAX_LENGTH_SUBTASK_LIST+1];
-	profiler_appins_task_node_t			node;
+	int 									line;
+	profiler_time_t							time;
+	long long								values[MAX_NUM_PAPI_EVENTS];
+	char									inscode;
+	char									subtask_list[MAX_LENGTH_SUBTASK_LIST+1];
+	profiler_appins_task_node_t				node;
 	struct profiler_appins_time_record * 	next;
 } profiler_appins_time_record, *profiler_appins_time_record_t;
 
 
-void 					profiler_init(int worker_thread_num);
-void					profiler_init_worker(int rank);
-void					profiler_fini_worker(int rank);
-void 					profiler_fini();
-profiler_task_node_t 	profiler_create_root_node();
-profiler_task_node_t 	profiler_create_new_node(profiler_task_node_t parent, int worker, int level);
-void 					profiler_add_time_start(void * thread, int worker, int start_code);
-void 					profiler_add_time_stop(void * thread, int worker, int stop_code);
+void 							profiler_init(int worker_thread_num);
+void							profiler_init_worker(int rank);
+void							profiler_fini_worker(int rank);
+void 							profiler_fini();
+profiler_libins_task_node_t 	profiler_create_root_node();
+profiler_libins_task_node_t 	profiler_create_new_node(profiler_libins_task_node_t parent);
+void 							profiler_add_time_start(void * thread, int worker, int start_code);
+void 							profiler_add_time_stop(void * thread, int worker, int stop_code);
 
 #endif /* MYTH_PROFILER_H_ */

@@ -168,10 +168,10 @@ int profiler_check_memory_usage() {
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	unsigned int usage = env->num_task_nodes * sizeof(profiler_task_node) +
-	  env->num_time_records * sizeof(profiler_time_record) +
-	  env->num_appins_records * sizeof(profiler_appins_time_record) +
-	  env->num_appins_nodes * sizeof(profiler_appins_task_node);
+	unsigned int usage = env->num_libins_nodes * sizeof(profiler_libins_task_node) +
+	  env->num_libins_records * sizeof(profiler_libins_time_record) +
+	  env->num_appins_nodes * sizeof(profiler_appins_task_node) +
+	  env->num_appins_records * sizeof(profiler_appins_time_record);
 	if (usage < profiler_mem_size_limit << 20)
 		return 1;
 	else
@@ -180,23 +180,23 @@ int profiler_check_memory_usage() {
 	return 1;
 #endif /*PROFILER_ON*/
 }
-profiler_task_node_t profiler_malloc_task_node(int worker) {
+profiler_libins_task_node_t profiler_malloc_libins_task_node(int worker) {
 	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
-	profiler_task_node_t ret = NULL;
-	ret = myth_flmalloc(worker, sizeof(profiler_task_node));
+	profiler_libins_task_node_t ret = NULL;
+	ret = myth_flmalloc(worker, sizeof(profiler_libins_task_node));
 	//assert(ret != NULL);
 
 	return ret;
 }
 
-profiler_time_record_t profiler_malloc_time_record(int worker) {
+profiler_libins_time_record_t profiler_malloc_libins_time_record(int worker) {
 	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
-	profiler_time_record_t ret = NULL;
-	ret = myth_flmalloc(worker, sizeof(profiler_time_record));
+	profiler_libins_time_record_t ret = NULL;
+	ret = myth_flmalloc(worker, sizeof(profiler_libins_time_record));
 	//assert(ret != NULL);
 
 	return ret;
@@ -224,16 +224,16 @@ profiler_appins_time_record_t profiler_malloc_appins_time_record(int worker) {
 	return ret;
 }
 
-void profiler_free_task_node(int worker, profiler_task_node_t node) {
+void profiler_free_libins_task_node(int worker, profiler_libins_task_node_t node) {
 #ifdef PROFILER_ON
 	assert(node);
 	if (node->level != 0)
-		myth_flfree(worker, strlen(node->tree_path) * sizeof(char), node->tree_path);
-	myth_flfree(worker, sizeof(profiler_task_node), node);
+		myth_flfree(worker, (strlen(node->tree_path)+1) * sizeof(char), node->tree_path);
+	myth_flfree(worker, sizeof(profiler_libins_task_node), node);
 #endif /*PROFILER_ON*/
 }
 
-void profiler_free_time_record(int worker, profiler_time_record_t record) {
+void profiler_free_libins_time_record(int worker, profiler_libins_time_record_t record) {
 #ifdef PROFILER_ON
 	assert(record);
 	myth_flfree(worker, sizeof(profiler_appins_time_record), record);
@@ -256,14 +256,14 @@ void profiler_free_appins_time_record(int worker, profiler_appins_time_record_t 
 #endif /*PROFILER_ON*/
 }
 
-profiler_time_record_t profiler_create_time_record(int type, int worker, profiler_time_t time) {
+profiler_libins_time_record_t profiler_create_time_record(int type, int worker, profiler_time_t time) {
 #ifdef PROFILER_ON
 	/* PROFILER_OFF */
 	if (profiler_off) return NULL;
 
 	// Allocate memory
-	profiler_time_record_t record;
-	record = profiler_malloc_time_record(worker);
+	profiler_libins_time_record_t record;
+	record = profiler_malloc_libins_time_record(worker);
 
 	// Set up fields
 	record->type = type;
@@ -274,6 +274,7 @@ profiler_time_record_t profiler_create_time_record(int type, int worker, profile
 	for (i=0; i<profiler_num_papi_events; i++) {
 		record->values[i] = 0;
 	}
+	record->node = NULL;
 	record->next = NULL;
 
 	// Return
@@ -367,7 +368,9 @@ void profiler_init(int worker_thread_num) {
 	// Make prof folder
 	mkdir(DIR_FOR_PROF_DATA, S_IRWXU | S_IRWXG | S_IROTH);
 	// Open overview data file
-	profiler_fp_overview = fopen(FILE_FOR_GENERAL_INFO, "w");
+	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 20 ) * sizeof(char) );
+	sprintf(trace_file_name, "tsprof/%s_summary.txt", profiler_trace_name);
+	profiler_fp_overview = fopen(trace_file_name, "w");
 	profiler_lock_fp_overview = (myth_internal_lock_t *) malloc(sizeof(myth_internal_lock_t));
 	myth_internal_lock_init(profiler_lock_fp_overview);
 
@@ -431,16 +434,14 @@ void profiler_init_worker(int worker) {
 	g_envs[worker].EventSet = PAPI_NULL;
 	if (profiler_num_papi_events > 0)
 		g_envs[worker].values = (long long *) malloc(profiler_num_papi_events * sizeof(long long));
-	g_envs[worker].head = NULL;
-	g_envs[worker].tail = NULL;
-	g_envs[worker].num_time_records = 0;
-	g_envs[worker].head_node = NULL;
-	g_envs[worker].tail_node = NULL;
-	g_envs[worker].num_task_nodes = 0;
+	g_envs[worker].num_libins_nodes = 0;
+	g_envs[worker].num_libins_records = 0;
+	g_envs[worker].head_lr = NULL;
+	g_envs[worker].tail_lr = NULL;
+	g_envs[worker].num_appins_nodes = 0;
+	g_envs[worker].num_appins_records = 0;
 	g_envs[worker].head_ar = NULL;
 	g_envs[worker].tail_ar = NULL;
-	g_envs[worker].num_appins_records = 0;
-	g_envs[worker].num_appins_nodes = 0;
 
 	int i;
 
@@ -517,7 +518,6 @@ void profiler_write_to_file(int worker) {
 	/* PROFILER_OFF */
 	if (profiler_off) return;
 
-	fprintf(stderr, "profiler_write_to_file(worker=%d)\n", worker);
 	profiler_libins_write_to_file(worker);
 	profiler_appins_write_to_file(worker);
 
@@ -525,7 +525,7 @@ void profiler_write_to_file(int worker) {
 }
 
 
-profiler_task_node_t profiler_create_root_node(int worker) {
+profiler_libins_task_node_t profiler_create_root_node() {
 #ifdef PROFILER_ON
 #ifdef PROFILER_LIB_INSTRUMENT_ON
 	/* PROFILER OFF */
@@ -533,35 +533,32 @@ profiler_task_node_t profiler_create_root_node(int worker) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return NULL;
 
-	// Allocate memory
-	profiler_task_node_t new_node;
-	new_node = profiler_malloc_task_node(worker);
-
-	// Get environment
+	/* Get environment */
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	// Attach to env's time record list
-	if (env->num_task_nodes == 0) {
-		env->head_node = new_node;
-		env->tail_node = new_node;
-	} else {
-		//assert(env->tail != NULL);
-		env->tail_node->next = new_node;
-		env->tail_node = new_node;
-	}
-	env->num_task_nodes++;
+	/* Get current worker thread */
+	int worker = env->rank;
 
-	// Set up fields
+	/* Allocate memory */
+	profiler_libins_task_node_t new_node;
+	new_node = profiler_malloc_libins_task_node(worker);
+
+	/* Increment env's libins node counter */
+	env->num_libins_nodes++;
+
+	/* Set fields */
 	new_node->tree_path = "0";
 	new_node->index = profiler_RSHash(new_node->tree_path, strlen(new_node->tree_path));
 	new_node->level = 0;
 	new_node->function_name = "function_name"; // not implemented yet
 	new_node->head_scl = 0; // not implemented yet
 	new_node->tail_scl = 0; // not implemented yet
-	new_node->num_child_tasks = 0;
+	new_node->subtask_count = 0;
+	new_node->record_count = 0;
+	new_node->ended = 0;
 
-	// Return
+	/* Return */
 	return new_node;
 #else
 	return NULL;
@@ -571,7 +568,7 @@ profiler_task_node_t profiler_create_root_node(int worker) {
 #endif /*PROFILER_ON*/
 }
 
-profiler_task_node_t profiler_create_new_node(profiler_task_node_t parent, int worker, int level) {
+profiler_libins_task_node_t profiler_create_new_node(profiler_libins_task_node_t parent) {
 #ifdef PROFILER_ON
 #ifdef PROFILER_LIB_INSTRUMENT_ON
 	/* PROFILER_OFF */
@@ -579,47 +576,39 @@ profiler_task_node_t profiler_create_new_node(profiler_task_node_t parent, int w
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return NULL;
 
-	// Out of profiling limit
+	/* Check profiling limit */
 	if (parent == NULL || parent->level == profiler_depth_limit)
 		return NULL;
 
-	// Measurement data limitation (must be after record data assignment)
-	if (profiler_check_memory_usage() == 0)
-		profiler_write_to_file(worker);
-
-	// Allocate memory
-	profiler_task_node_t new_node;
-	new_node = profiler_malloc_task_node(worker);
-
-	// Get environment
+	/* Get environment */
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	// Attach to env's time record list
-	if (env->num_task_nodes == 0) {
-		env->head_node = new_node;
-		env->tail_node = new_node;
-	} else {
-		//assert(env->tail != NULL);
-		env->tail_node->next = new_node;
-		env->tail_node = new_node;
-	}
-	env->num_task_nodes++;
+	/* Get current worker thread */
+	int worker = env->rank;
 
-	// Set up fields
-	parent->num_child_tasks++;
+	/* Allocate memory */
+	profiler_libins_task_node_t new_node;
+	new_node = profiler_malloc_libins_task_node(worker);
+
+	/* Increment env's libins node counter */
+	env->num_libins_nodes++;
+
+	/* Set fields */
 	int length = strlen(parent->tree_path) + 5;
-	//printf("length=%d\n", length);
 	new_node->tree_path = (char *) myth_flmalloc(worker, length * sizeof(char));
-	sprintf(new_node->tree_path, "%s_%d", parent->tree_path, parent->num_child_tasks);
+	sprintf(new_node->tree_path, "%s_%d", parent->tree_path, parent->subtask_count);
 	new_node->index = profiler_RSHash(new_node->tree_path, strlen(new_node->tree_path));
 	new_node->level = parent->level + 1;
 	new_node->function_name = "function_name"; // not implemented yet
 	new_node->head_scl = 0; // not implemented yet
 	new_node->tail_scl = 0; // not implemented yet
-	new_node->num_child_tasks = 0;
+	new_node->subtask_count = 0;
+	new_node->record_count = 0;
+	new_node->ended = 0;
+	parent->subtask_count++;
 
-	// Return
+	/* Return */
 	return new_node;
 #else
 	return NULL;
@@ -637,54 +626,54 @@ void profiler_add_time_start(void * thread_t, int worker, int start_code) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
-	if (!thread_t) {
-		fprintf(stderr, "Error: profiler_add_time_start(): argument thread_t=NULL\n");
-		return;
-	}
+	/* Get task node */
+	assert(thread_t);
 	myth_thread_t thread = (myth_thread_t) thread_t;
-	profiler_task_node_t node = thread->node;
+	profiler_libins_task_node_t node = thread->node;
 
-	// Out of profiling limit
-	if (node == NULL) {
-		return;
-	}
+	/* Check profiling limit */
+	if (node == NULL) return;
 
-	// Get environment
+	/* Get environment */
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	// Create time record
-	profiler_time_record_t record = NULL;
+	/* Allocate memory */
+	profiler_libins_time_record_t record = NULL;
 	record = profiler_create_time_record(start_code << 1, worker, 0);
 
-	// Attach to env's time record list
-	if (env->num_time_records == 0) {
-		env->head = record;
-		env->tail = record;
+	/* Attach to env's time record list */
+	if (env->num_libins_records == 0) {
+		env->head_lr = record;
+		env->tail_lr = record;
 	} else {
 		//assert(env->tail != NULL);
-		env->tail->next = record;
-		env->tail = record;
+		env->tail_lr->next = record;
+		env->tail_lr = record;
 	}
-	env->num_time_records++;
+	env->num_libins_records++;
 
-	// Task index
+	/* Set remained fields */
 	record->task_index = node->index;
+	record->node = node;
 
-	// Counter values
+	/* Increment node's counter */
+	node->record_count++;
+
+	/* Get time, counter values */
 	if (profiler_num_papi_events > 0) {
 		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 			profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-		int i;
-		for (i=0; i<profiler_num_papi_events; i++)
-			record->values[i] = g_envs[worker].values[i];
 	}
+	profiler_time_t time = profiler_get_curtime();
 
-	//TODO: Must be at the end
-	// Time
-	record->time = profiler_get_curtime();
+	/* Assign time, counter values */
+	record->time = time;
+	int i;
+	for (i=0; i<profiler_num_papi_events; i++)
+		record->values[i] = g_envs[worker].values[i];
 
-	// Measurement data limitation (must be after record data assignment)
+	/* Measurement data limitation (must be after record data assignment) */
 	if (profiler_check_memory_usage() == 0)
 		profiler_write_to_file(worker);
 #endif /*PROFILER_LIB_INSTRUMENT_ON*/
@@ -699,54 +688,57 @@ void profiler_add_time_stop(void * thread_t, int worker, int stop_code) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
-	if (!thread_t) {
-		fprintf(stderr, "Error: profiler_add_time_stop(): argument thread_t=NULL\n");
-		return;
-	}
+	/* Get task node */
+	assert(thread_t);
 	myth_thread_t thread = (myth_thread_t) thread_t;
-	profiler_task_node_t node = thread->node;
+	profiler_libins_task_node_t node = thread->node;
 
-	// Out of profiling limit
-	if (node == NULL) {
-		return;
-	}
+	/* Check profiling limit */
+	if (node == NULL) return;
 
-	//TODO: Must be at the begining
-	// Time
-	profiler_time_t time = profiler_get_curtime();
-
-	// Get environment
+	/* Get environment */
 	myth_running_env_t env;
 	env = myth_get_current_env();
 
-	// Create time record
-	profiler_time_record_t record = NULL;
-	record = profiler_create_time_record((stop_code << 1) + 1, worker, time);
-
-	// Attach to env's time record list
-	if (env->num_time_records == 0) {
-		env->head = record;
-		env->tail = record;
-	} else {
-		//assert(env->tail != NULL);
-		env->tail->next = record;
-		env->tail = record;
-	}
-	env->num_time_records++;
-
-	// Task index
-	record->task_index = node->index;
-
-	// Counter values
+	/* Get time, counter values */
+	profiler_time_t time = profiler_get_curtime();
 	if (profiler_num_papi_events > 0) {
 		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 			profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
-		int i;
-		for (i=0; i<profiler_num_papi_events; i++)
-			record->values[i] = g_envs[worker].values[i];
 	}
 
-	// Measurement data limitation (must be after record data assignment)
+	/* Allocate memory */
+	profiler_libins_time_record_t record = NULL;
+	record = profiler_create_time_record((stop_code << 1) + 1, worker, time);
+
+	/* Attach to env's time record list */
+	if (env->num_libins_records == 0) {
+		env->head_lr = record;
+		env->tail_lr = record;
+	} else {
+		//assert(env->tail != NULL);
+		env->tail_lr->next = record;
+		env->tail_lr = record;
+	}
+	env->num_libins_records++;
+
+	/* Set remained fields */
+	record->task_index = node->index;
+	record->node = node;
+
+	/* Increment node's counter */
+	node->record_count++;
+
+	/* Task's end*/
+	if (stop_code == 13)
+		node->ended = 1;
+
+	/* Assign counter values */
+	int i;
+	for (i=0; i<profiler_num_papi_events; i++)
+		record->values[i] = g_envs[worker].values[i];
+
+	/* Measurement data limitation (must be after record data assignment) */
 	if (profiler_check_memory_usage() == 0)
 		profiler_write_to_file(worker);
 #endif /*PROFILER_LIB_INSTRUMENT_ON*/
@@ -765,6 +757,7 @@ void profiler_libins_init() {
 	char * trace_file_name = malloc( ( strlen(profiler_trace_name) + 15 ) * sizeof(char) );
 	sprintf(trace_file_name, "tsprof/%s_lib", profiler_trace_name);
 	profiler_otf_init(&myManager, &myWriter, trace_file_name);
+
 #endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
@@ -778,6 +771,7 @@ void profiler_libins_fini() {
 	if (profiler_lib_ins_off) return;
 
 	profiler_otf_fini(&myManager, &myWriter);
+
 #endif /*PROFILER_LIB_INSTRUMENT_ON*/
 #endif /*PROFILER_ON*/
 }
@@ -790,48 +784,20 @@ void profiler_libins_write_to_file(int worker) {
 	/* PROFILER_LIB_INS_OFF */
 	if (profiler_lib_ins_off) return;
 
-	// Get start time
+	/* Get start time */
 	profiler_time_t start_time = profiler_get_curtime();
 
-	// Get environment
-	myth_running_env_t env = &g_envs[worker];
+	/* Get environment */
+	myth_running_env_t env;
+	env = myth_get_current_env();
 
-
-	// Write task_nodes
-	profiler_task_node_t node = env->head_node;
-	profiler_task_node_t node_t;
-	int num_nodes_written = 0;
-	int num_nodes = env->num_task_nodes;
-	while (node != NULL) {
-		// Get element
-		node_t = node->next;
-		// Create key-value list for task_node
-		OTF_KeyValueList * kvlist;
-		kvlist = OTF_KeyValueList_new();
-		assert(kvlist);
-		profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_TASK_LEVEL, node->level);
-		assert(profiler_otf_errno == 0);
-		profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_TASK_TREE_PATH, (unsigned char *) node->tree_path, strlen(node->tree_path));
-		assert(profiler_otf_errno == 0);
-		// Write task_node
-		profiler_otf_errno = OTF_Writer_writeDefFunctionKV(myWriter, worker+1, node->index, node->function_name, 0, node->head_scl, kvlist);
-		assert(profiler_otf_errno);
-		// Free memory
-		profiler_free_task_node(worker, node);
-		// Increment counter
-		num_nodes_written++;
-		node = node_t;
-	}
-	env->head_node = NULL;
-	env->tail_node = NULL;
-	env->num_task_nodes = 0;
-
-
-	// Write time records
-	profiler_time_record_t record = env->head;
-	profiler_time_record_t record_t = NULL;
+	/* Write libins_records */
+	profiler_libins_time_record_t record = env->head_lr;
+	profiler_libins_time_record_t record_t = NULL;
 	int num_records_written = 0;
-	int num_records = env->num_time_records;
+	int num_records = env->num_libins_records;
+	int num_nodes_deleted = 0;
+	int num_nodes = env->num_libins_nodes;
 	while (record != NULL) {
 
 		// Key-value list
@@ -843,8 +809,8 @@ void profiler_libins_write_to_file(int worker) {
 		int i;
 		int num_starts = 0;
 		int num_stops = 0;
-		profiler_time_record_t start_record = NULL;
-		profiler_time_record_t stop_record = NULL;
+		profiler_libins_time_record_t start_record = NULL;
+		profiler_libins_time_record_t stop_record = NULL;
 		record_t = record;
 		while (record_t != NULL && record_t->type % 2 == 0) {
 			num_starts++;
@@ -858,6 +824,8 @@ void profiler_libins_write_to_file(int worker) {
 		}
 
 		if (num_starts == 0) {
+
+			fprintf(stderr, "Error: num_starts == 0, num_stops == %d (type=%d)\n", num_stops, record->type);
 			// Add a stop time record without any associated start time record
 			profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_STOP_FUNCTION, record->task_index);
 			assert(profiler_otf_errno == 0);
@@ -872,9 +840,12 @@ void profiler_libins_write_to_file(int worker) {
 			profiler_otf_errno = OTF_Writer_writeEventCommentKV(myWriter, record->time, worker+1, "stop time record without any associated start time record", kvlist);
 			assert(profiler_otf_errno);
 			num_records_written++;
+
 		} else {
 
 			if (num_stops == 0) {
+
+				fprintf(stderr, "Error: num_stops == 0, num_starts == %d\n", num_starts);
 				// Add a start time record without any associated stop time record
 				profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_START_FUNCTION, start_record->task_index);
 				assert(profiler_otf_errno == 0);
@@ -889,25 +860,30 @@ void profiler_libins_write_to_file(int worker) {
 				profiler_otf_errno = OTF_Writer_writeEventCommentKV(myWriter, start_record->time, worker+1, "start time record without any associated stop time record", kvlist);
 				assert(profiler_otf_errno);
 				num_records_written++;
+
 			} else {
+
 				unsigned char * start_types_str = NULL;
 				unsigned char * stop_types_str = NULL;
 				if (num_starts > 1) {
 					start_types_str = malloc(num_starts * sizeof(char));
 					int i;
-					profiler_time_record_t record_temp = record;
+					profiler_libins_time_record_t record_temp = record;
 					for (i=0; i<num_starts; i++, record_temp=record_temp->next)
 						start_types_str[i] = record_temp->type;
 				}
 				if (num_stops > 1) {
 					stop_types_str = malloc(num_stops * sizeof(char));
 					int i;
-					profiler_time_record_t record_temp = record;
+					profiler_libins_time_record_t record_temp = record;
 					for (i=0; i<num_stops; i++, record_temp=record_temp->next)
 						stop_types_str[i] = record_temp->type;
 				}
 
-				if (start_record->time == stop_record->time) {
+				if (start_record->time == stop_record->time)
+					fprintf(stderr, "Error: start_record->time == stop_record->time, num_starts=%d, num_stops=%d\n", num_starts, num_stops);
+/*				if (start_record->time == stop_record->time) {
+					fprintf(stderr, "Error: start_record->time == stop_record->time, num_starts=%d, num_stops=%d\n", num_starts, num_stops);
 					// Aggregate start and stop records
 					profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_START_FUNCTION, start_record->task_index);
 					assert(profiler_otf_errno == 0);
@@ -932,7 +908,7 @@ void profiler_libins_write_to_file(int worker) {
 					profiler_otf_errno = OTF_Writer_writeEventCommentKV(myWriter, start_record->time, worker+1, "aggregate start and stop time record", kvlist);
 					assert(profiler_otf_errno);
 					num_records_written++;
-				} else {
+				} else {*/
 					// Write each start and stop
 					OTF_KeyValueList * kvlist2;
 					kvlist2 = OTF_KeyValueList_new();
@@ -974,23 +950,44 @@ void profiler_libins_write_to_file(int worker) {
 					}
 					num_records_written += 2;
 
-				}
+				//}
 			}
 
 		}
 
 		// Free memory
-		profiler_time_record_t record_temp;
+		profiler_libins_time_record_t record_temp;
 		while (record != record_t) {
 			record_temp = record->next;
-			profiler_free_time_record(worker, record);
+			profiler_libins_task_node_t node = record->node;
+			node->record_count--;
+			if (node->record_count == 0 && node->ended == 1) {
+
+				// Write libins_node
+				OTF_KeyValueList * kvlist;
+				kvlist = OTF_KeyValueList_new();
+				assert(kvlist);
+				profiler_otf_errno = OTF_KeyValueList_appendInt32(kvlist, KEY_PROFILER_TASK_LEVEL, node->level);
+				assert(profiler_otf_errno == 0);
+				profiler_otf_errno = OTF_KeyValueList_appendByteArray(kvlist, KEY_PROFILER_TASK_TREE_PATH, (unsigned char *) node->tree_path, strlen(node->tree_path));
+				assert(profiler_otf_errno == 0);
+				// Write task_node
+				profiler_otf_errno = OTF_Writer_writeDefFunctionKV(myWriter, worker+1, node->index, node->function_name, 0, node->head_scl, kvlist);
+				assert(profiler_otf_errno);
+
+				// Delete libins_node
+				g_envs[node->worker].num_appins_nodes--;
+				profiler_free_libins_task_node(node->worker, node);
+				num_nodes_deleted++;
+
+			}
+			profiler_free_libins_time_record(worker, record);
 			record = record_temp;
 		}
 	}
-	env->head = NULL;
-	env->tail = NULL;
-	env->num_time_records = 0;
-
+	env->head_lr = NULL;
+	env->tail_lr = NULL;
+	env->num_libins_records = 0;
 
 	// Get stop time
 	profiler_time_t stop_time = profiler_get_curtime();
@@ -999,8 +996,9 @@ void profiler_libins_write_to_file(int worker) {
 	myth_internal_lock_lock(profiler_lock_fp_overview);
 	fprintf(profiler_fp_overview, "\nprofiler_libins_write_to_file()\n");
 	fprintf(profiler_fp_overview, "worker: %d\n", worker);
-	fprintf(profiler_fp_overview, "number of time records (written/total): %d/%d\n", num_records_written, num_records);
-	fprintf(profiler_fp_overview, "number of nodes (deleted/total): %d/%d\n", num_nodes_written, num_nodes);
+	fprintf(profiler_fp_overview, "number of libins records (written/total): %d/%d\n", num_records_written, num_records);
+	fprintf(profiler_fp_overview, "number of deleted libins nodes (on various workers): %d\n", num_nodes_deleted);
+	fprintf(profiler_fp_overview, "number of libins nodes (of this worker): %d\n", num_nodes);
 	fprintf(profiler_fp_overview, "from: %llu\n", start_time);
 	fprintf(profiler_fp_overview, "to  : %llu\n", stop_time);
 	fprintf(profiler_fp_overview, "Time cost: %llu\n", stop_time-start_time);
@@ -1448,12 +1446,12 @@ char profiler_appins_instrument(void * node_void, int line, int inscode, ...) {
 	case PROFILER_APPINS_BEGIN:
 	case PROFILER_APPINS_RESUME:
 	case PROFILER_APPINS_SYNC:
-	  // Time
-	  time = profiler_get_curtime();
 	  // Counter values
 	  if (profiler_num_papi_events > 0)
 		if ((profiler_retval = PAPI_read(g_envs[worker].EventSet, g_envs[worker].values)) != PAPI_OK)
 		  profiler_PAPI_fail(__FILE__, __LINE__, "PAPI_read", profiler_retval);
+	  // Time
+	  time = profiler_get_curtime();
 	  // Break
 	  break;
 	}
